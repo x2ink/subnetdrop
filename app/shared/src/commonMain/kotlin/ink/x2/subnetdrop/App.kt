@@ -2,6 +2,7 @@ package ink.x2.subnetdrop
 
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -47,7 +48,12 @@ fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ) { contentPadding ->
-            BoxWithConstraints(Modifier.fillMaxSize().padding(contentPadding)) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding)
+                    .consumeWindowInsets(contentPadding),
+            ) {
                 if (maxWidth >= WIDE_LAYOUT_MIN_WIDTH) {
                     val sidebarWidth = (maxWidth * SIDEBAR_WIDTH_FRACTION).coerceIn(
                         MIN_SIDEBAR_WIDTH,
@@ -93,6 +99,9 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onConversationSelected = viewModel::openConversation,
             onRetry = viewModel::retryRuntime,
             onDisplayNameChanged = viewModel::updateDisplayName,
+            onSaveDirectoryChanged = viewModel::updateSaveDirectory,
+            onIncomingFileConfirmationChanged = viewModel::updateIncomingFileConfirmation,
+            onSettingsError = viewModel::reportFilePickerError,
         )
         VerticalDivider(Modifier.width(1.dp))
         ChatScreen(
@@ -133,6 +142,9 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onConversationSelected = viewModel::openConversation,
                         onRetry = viewModel::retryRuntime,
                         onDisplayNameChanged = viewModel::updateDisplayName,
+                        onSaveDirectoryChanged = viewModel::updateSaveDirectory,
+                        onIncomingFileConfirmationChanged = viewModel::updateIncomingFileConfirmation,
+                        onSettingsError = viewModel::reportFilePickerError,
                     )
                 }
                 is ChatRoute -> NavEntry(route) {
@@ -183,6 +195,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
     val section by viewModel.section.collectAsStateWithLifecycle()
     val incomingFileOffers by viewModel.incomingFileOffers.collectAsStateWithLifecycle()
     val fileTransfers by viewModel.fileTransfers.collectAsStateWithLifecycle()
+    val fileTransferSettings by viewModel.fileTransferSettings.collectAsStateWithLifecycle()
     return AppUiState(
         peers = peers,
         conversations = conversations,
@@ -196,6 +209,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
         section = section,
         incomingFileOffers = incomingFileOffers,
         fileTransfers = fileTransfers,
+        fileTransferSettings = fileTransferSettings,
     )
 }
 

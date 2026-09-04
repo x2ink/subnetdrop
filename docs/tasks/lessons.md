@@ -1,5 +1,38 @@
 # 项目经验
 
+## 暂存区提交 Skill 的授权语义
+
+- “生成 commit message”和“帮我 commit”不是同一种授权：前者必须只读，后者可以直接提交当前暂存区，不应再要求
+  一次确认。
+- 用户已经用暂存区表达了提交边界，Skill 不应擅自 `git add`、拆分或混入工作区内容；提交失败也不能用
+  `--no-verify` 绕过 hook。
+- Skill 行为改变时同时检查 `agents/openai.yaml`、根 `AGENTS.md` 和 README，避免入口描述继续触发旧行为。
+
+## Compose 消息卡片测量
+
+- `heightIn(min = ...)` 只保证容器高度，不会自动把子项居中；气泡正文需要明确的对齐容器，否则单行文字会偏上。
+- 自适应卡片不能同时保留固定 `minWidth`、内部 `fillMaxWidth` 和填满型 `weight`，其中任一项都可能把短内容撑到
+  最大可用宽度。应由内容的 intrinsic width 决定实际宽度，只保留防止桌面端过宽的最大值。
+
+## 文件接收策略与媒体预览
+
+- “默认自动接收、可选逐文件确认”是传输策略，不是对话框显隐选项；必须持久化到领域端口，并由网络层处理每个
+  offer 时读取，才能保证 UI 与协议行为一致。
+- 文件边收边写与媒体边收边播是两种能力。系统默认应用没有等待增长中文件或限制 seek 的跨平台契约，不能把
+  “临时文件可见”当成渐进播放已完成；可靠实现需要受控数据源与应用内播放器。
+- 自定义 Android SAF 目录不能只保存 `content://` 字符串，还要在选择时获取持久化权限；优先调用 FileKit 的
+  bookmark API，不重复实现 ContentResolver 权限细节。
+- edge-to-edge 同时包含状态栏、手势/三键导航栏和内容 inset。仅设置透明色不一定消除 Android 10+ 三键导航的
+  对比度遮罩，需要把 `isNavigationBarContrastEnforced` 纳入验证。
+
+## 聊天时间线与 IME 布局
+
+- 文件传输如果属于聊天语义，就必须作为带稳定 key 和时间戳的时间线 item 与文字共同滚动；不要在输入框上方
+  再放一个独立的固定高度传输面板，否则文件不具备消息的位置和方向语义。
+- 发送/已读状态不应放进文字气泡的内容容器，它会参与气泡宽高测量；状态应作为气泡下方的同方向附属行。
+- edge-to-edge 的聊天输入栏不能只在输入栏内部叠加 `imePadding`。先消费 Scaffold 已应用的系统栏 inset，再由
+  页面外层处理 IME，并配合 Activity `adjustResize`，才能避免导航栏与键盘 inset 双算。
+
 ## 项目级 Codex Skill 的发现目录
 
 - 项目内需要自动发现或通过 `$skill-name` 调用的 Skill 必须放在 `.agents/skills/<skill-name>/`，不能使用普通

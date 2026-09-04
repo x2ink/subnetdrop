@@ -54,7 +54,10 @@ flowchart LR
 - 紧凑宽度使用 Navigation 3 页面栈和底部“附近设备 / 聊天 / 设置”导航。
 - 桌面宽度使用主从双栏；左右列表分别滚动，窗口高度缩小时内容不被固定区域截断。
 - 桌面最小窗口为 `480 x 420`，默认 `1180 x 760`。
-- FileKit 从 common Compose UI 发起文件选择，避免维护 Android Activity Result 与 AWT 两套业务接口。
+- FileKit 从 common Compose UI 发起文件与目录选择、执行跨平台文件 I/O 和系统默认应用打开，避免维护
+  Android Activity Result 与 AWT 两套业务接口。
+- Multiplatform Settings 以同一个领域仓库暴露持久化文件设置，Android 使用 SharedPreferences，桌面使用
+  Preferences。
 
 ## 平台能力表
 
@@ -63,7 +66,8 @@ flowchart LR
 | 发现 | `PeerDiscovery` | 共享 UDP 组播 + multicast lock | 共享 UDP 组播 |
 | 数据库 | repository ports | Android driver | SQLite JDBC |
 | 私钥 | `SecureKeyValueStore` | Android Keystore | java-keyring |
-| 文件选择 | `rememberPlatformFilePicker` | FileKit provider | FileKit native dialog |
+| 文件选择、目录与打开 | FileKit common API | Android provider / SAF | FileKit native dialog / OS opener |
+| 文件设置 | `FileTransferSettingsRepository` | SharedPreferences | Preferences |
 | 文件目录 | `FileStorage` | app-specific external directory | user Downloads/SubnetDrop |
 | 生命周期 | `SubnetDropRuntime` | ProcessLifecycleOwner | Compose application/window |
 

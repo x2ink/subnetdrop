@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
@@ -33,6 +34,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,6 +68,9 @@ fun HomeScreen(
     onConversationSelected: (Conversation) -> Unit,
     onRetry: () -> Unit,
     onDisplayNameChanged: (String) -> Unit,
+    onSaveDirectoryChanged: (String) -> Unit,
+    onIncomingFileConfirmationChanged: (Boolean) -> Unit,
+    onSettingsError: (String) -> Unit,
 ) {
     Column(modifier.fillMaxSize()) {
         HomeHeader(state.localDisplayName)
@@ -82,6 +87,11 @@ fun HomeScreen(
                 displayName = state.localDisplayName,
                 modifier = Modifier.weight(1f),
                 onDisplayNameChanged = onDisplayNameChanged,
+                saveDirectory = state.fileTransferSettings.saveDirectory,
+                requireIncomingFileConfirmation = state.fileTransferSettings.requireIncomingConfirmation,
+                onSaveDirectoryChanged = onSaveDirectoryChanged,
+                onIncomingFileConfirmationChanged = onIncomingFileConfirmationChanged,
+                onSettingsError = onSettingsError,
             )
         }
         SectionSelector(state.section, onSectionSelected)
@@ -374,8 +384,18 @@ private fun SettingsPanel(
     displayName: String?,
     modifier: Modifier,
     onDisplayNameChanged: (String) -> Unit,
+    saveDirectory: String,
+    requireIncomingFileConfirmation: Boolean,
+    onSaveDirectoryChanged: (String) -> Unit,
+    onIncomingFileConfirmationChanged: (Boolean) -> Unit,
+    onSettingsError: (String) -> Unit,
 ) {
     var draftName by remember(displayName) { mutableStateOf(displayName.orEmpty()) }
+    val launchDirectoryPicker = rememberSaveDirectoryPickerLauncher(
+        currentDirectory = saveDirectory,
+        onDirectorySelected = onSaveDirectoryChanged,
+        onError = onSettingsError,
+    )
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp),
@@ -415,13 +435,69 @@ private fun SettingsPanel(
         item { SettingValue(Icons.Outlined.Security, "端到端加密", "HPKE · X25519 · AES-256-GCM") }
         item { SettingValue(Icons.Outlined.Security, "身份签名", "Ed25519") }
         item { SettingValue(Icons.Outlined.Storage, "聊天记录", "仅保存在本机") }
+        item {
+            ToggleSetting(
+                icon = Icons.Outlined.Security,
+                label = "接收文件前确认",
+                detail = if (requireIncomingFileConfirmation) {
+                    "每次询问是否接收"
+                } else {
+                    "默认自动接收并开始传输"
+                },
+                checked = requireIncomingFileConfirmation,
+                onCheckedChange = onIncomingFileConfirmationChanged,
+            )
+        }
+        item {
+            SettingValue(
+                icon = Icons.Outlined.FolderOpen,
+                label = "文件保存位置",
+                value = saveDirectory,
+                modifier = Modifier.clickable(onClick = launchDirectoryPicker),
+                trailingIcon = Icons.Outlined.ChevronRight,
+            )
+        }
     }
 }
 
 @Composable
-private fun SettingValue(icon: ImageVector, label: String, value: String) {
+private fun ToggleSetting(
+    icon: ImageVector,
+    label: String,
+    detail: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) },
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+@Composable
+private fun SettingValue(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    trailingIcon: ImageVector? = null,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
@@ -433,8 +509,11 @@ private fun SettingValue(icon: ImageVector, label: String, value: String) {
                     text = value,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            trailingIcon?.let { Icon(it, contentDescription = "更改$label") }
         }
     }
 }

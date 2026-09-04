@@ -37,6 +37,7 @@ kotlin {
                 implementation(libs.ktor.serverCio)
                 implementation(libs.ktor.serverWebsockets)
                 implementation(libs.tink.android)
+                implementation(libs.filekit.core)
             }
         }
         jvmMain {
@@ -50,6 +51,7 @@ kotlin {
                 implementation(libs.ktor.serverWebsockets)
                 implementation(libs.java.keyring)
                 implementation(libs.tink)
+                implementation(libs.filekit.core)
             }
         }
         commonTest.dependencies {

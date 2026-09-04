@@ -9,9 +9,15 @@ device identity and trust model.
 ## Product behavior
 
 - A sender selects one local file from an open conversation.
-- The receiver sees the file name and size and must explicitly accept or reject the offer.
+- Incoming offers are accepted automatically by default. The receiver can enable per-file confirmation in Settings;
+  confirmation mode exposes accept and reject actions before any content bytes are sent.
+- Each transfer appears in the conversation timeline as a directional file-message card, interleaved with text by its
+  creation time instead of being rendered in a separate transfer panel.
 - Accepted files show live byte progress on both devices.
-- Completed incoming files are stored in the platform download directory under a `SubnetDrop` folder.
+- The receiver can choose a persistent save directory in Settings. The initial value is the platform download directory
+  under a `SubnetDrop` folder.
+- A completed incoming file, or the sender's existing source file, can be opened with the operating system's default
+  application from its file-message card.
 - Failed, rejected and cancelled transfers remain visible for the current app session with an explicit state.
 - File contents are streamed in bounded chunks and are never loaded into memory as one buffer.
 - Transfer cards and progress are not persisted across application restarts in v1; successfully received files remain
@@ -29,6 +35,12 @@ interface FileTransferService {
     suspend fun rejectOffer(transferId: String)
     suspend fun cancelTransfer(transferId: String)
 }
+
+interface FileTransferSettingsRepository {
+    val settings: StateFlow<FileTransferSettings>
+    suspend fun updateSaveDirectory(path: String)
+    suspend fun updateRequireIncomingConfirmation(required: Boolean)
+}
 ```
 
 ## Protocol
@@ -42,7 +54,11 @@ sequenceDiagram
     participant R as Receiver
     S->>R: Signed FILE_OFFER metadata
     R-->>S: Signed delivery ACK
-    R->>R: User accepts or rejects
+    alt Confirmation is disabled (default)
+        R->>R: Prepare destination automatically
+    else Confirmation is enabled
+        R->>R: User accepts or rejects
+    end
     R->>S: Signed FILE_DECISION
     S-->>R: Signed delivery ACK
     S->>R: Open upload WebSocket
@@ -74,20 +90,28 @@ modification but does not hide the file from an observer on the same network.
 - A transfer must not write more bytes than declared in its offer.
 - Rejected, cancelled, timed-out or invalid transfers delete their temporary data.
 - Existing destination files are preserved by selecting a collision-free final name.
+- Automatic acceptance means a trusted peer can consume receiver bandwidth and disk space. Users who do not want that
+  policy must enable per-file confirmation.
 
 ## Platform behavior
 
-- Android, macOS and Windows use FileKit's Compose Multiplatform launcher and platform-native file dialog.
+- Android, macOS and Windows use FileKit's Compose Multiplatform launchers and platform-native file/directory dialogs.
 - Android provider-backed selections are copied through FileKit into app cache before the JVM transport reads them.
-- Desktop received files use `~/Downloads/SubnetDrop`; Android uses the app-specific external Downloads directory.
+- Android retains access to a selected Storage Access Framework directory. Desktop stores the selected path directly.
+- Desktop initially uses `~/Downloads/SubnetDrop`; Android initially uses the app-specific external Downloads directory.
+- A receiver-side file card is openable only after final length and SHA-256 validation publishes the completed file.
+- Bytes are streamed to disk while receiving, but v1 does not claim progressive media playback. Opening a growing file
+  in an external application cannot guarantee blocking reads, range semantics, codec support, or a playable MP4 index.
 
 ## Acceptance criteria
 
 1. A trusted desktop peer can select and offer a file from a conversation.
-2. The receiver must accept before any file bytes are sent.
+2. With confirmation disabled, a valid offer from a trusted peer is accepted automatically; with confirmation enabled,
+   the receiver can reject it without receiving file bytes.
 3. Both sides expose progress and terminal state.
 4. A successful receiver file has the exact byte count and SHA-256 digest of the source.
 5. Tampered, reordered, oversized and untrusted traffic is rejected without publishing a destination file.
 6. JVM unit/integration tests cover accepted multi-chunk transfer, rejection and tamper/order validation.
 7. Android, macOS and Windows file selection, destination handling and cross-platform transfer are verified on their
    target systems before release.
+8. The confirmation preference and save directory survive application restart.

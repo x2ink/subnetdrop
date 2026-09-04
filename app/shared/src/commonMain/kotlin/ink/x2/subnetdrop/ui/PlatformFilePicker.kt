@@ -7,7 +7,9 @@ import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.copyTo
 import io.github.vinceglb.filekit.createDirectories
+import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher as rememberFileKitPickerLauncher
+import io.github.vinceglb.filekit.extension
 import io.github.vinceglb.filekit.mimeType
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.path
@@ -36,22 +38,50 @@ fun rememberFilePickerLauncher(
     return launcher::launch
 }
 
+@Composable
+fun rememberSaveDirectoryPickerLauncher(
+    currentDirectory: String,
+    onDirectorySelected: (String) -> Unit,
+    onError: (String) -> Unit,
+): () -> Unit {
+    val scope = rememberCoroutineScope()
+    val launcher = rememberDirectoryPickerLauncher(
+        directory = currentDirectory.takeIf(String::isNotBlank)?.let(::PlatformFile),
+        onError = { failure -> onError(failure.message ?: "无法打开目录选择器") },
+        onResult = { selected ->
+            selected ?: return@rememberDirectoryPickerLauncher
+            scope.launch {
+                runCatching {
+                    persistDirectoryAccess(selected)
+                    selected.path
+                }
+                    .onSuccess(onDirectorySelected)
+                    .onFailure { failure -> onError(failure.message ?: "无法保存目录访问权限") }
+            }
+        },
+    )
+    return launcher::launch
+}
+
 private suspend fun PlatformFile.toTransferFile(): LocalFile {
+    val originalName = name
+    val originalContentType = mimeType()?.toString()
     val transferSource = if (path.startsWith(CONTENT_URI_PREFIX)) copyProviderFileToCache() else this
     val fileSize = transferSource.size()
     require(fileSize >= 0) { "无法确定所选文件大小" }
     return LocalFile(
-        name = name,
+        name = originalName,
         path = transferSource.path,
         size = fileSize,
-        contentType = mimeType()?.toString(),
+        contentType = originalContentType,
     )
 }
 
 private suspend fun PlatformFile.copyProviderFileToCache(): PlatformFile {
     val cacheDirectory = PlatformFile(FileKit.cacheDir, OUTGOING_CACHE_DIRECTORY)
     cacheDirectory.createDirectories()
-    val cacheName = "upload-${Random.nextLong().toULong().toString(16)}.tmp"
+    val extensionSuffix = extension.takeIf(String::isNotBlank)?.let { ".$it" }.orEmpty()
+    val cacheName = "upload-${Random.nextLong().toULong().toString(16)}$extensionSuffix"
     val cachedFile = PlatformFile(cacheDirectory, cacheName)
     copyTo(cachedFile)
     return cachedFile

@@ -13,6 +13,7 @@ data class IncomingFileOffer(
     val peerDisplayName: String,
     val fileName: String,
     val size: Long,
+    val contentType: String? = null,
 )
 
 data class FileTransfer(
@@ -20,6 +21,8 @@ data class FileTransfer(
     val peerId: String,
     val fileName: String,
     val size: Long,
+    val createdAt: Long,
+    val contentType: String? = null,
     val direction: FileTransferDirection,
     val status: FileTransferStatus,
     val transferredBytes: Long = 0,

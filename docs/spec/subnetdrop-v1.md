@@ -7,7 +7,8 @@
 3. Support one-to-one text conversations with live delivery status.
 4. Store conversation history locally on each device.
 5. Encrypt message content for the intended peer and authenticate the sender.
-6. Transfer one file at a time after explicit receiver acceptance, using a high-speed binary stream and whole-file verification.
+6. Transfer one file at a time using a high-speed binary stream and whole-file verification; default to automatic
+   acceptance while allowing the receiver to require confirmation in Settings.
 7. Use Clean Architecture and Koin constructor injection.
 
 ## Non-goals
@@ -49,8 +50,9 @@ messages from `DELIVERED` to `READ`. Conversation summaries expose an unread cou
 
 ### File transfer
 
-The sender validates one selected file and sends signed metadata. The receiver must explicitly accept before any content
-is uploaded. Accepted content uses ordered plaintext 512 KiB binary frames over one WebSocket. Both sides calculate
+The sender validates one selected file and sends signed metadata. By default, a trusted receiver prepares its configured
+save directory and accepts automatically; users can enable per-file acceptance in Settings. Accepted content uses ordered
+plaintext 512 KiB binary frames over one WebSocket. Both sides calculate
 SHA-256 while streaming; the sender signs the final digest, and the receiver publishes the file only after byte-count and
 digest verification. Detailed limits are defined in
 [file-transfer-v1.md](file-transfer-v1.md).
@@ -150,6 +152,6 @@ Long-lived database, repository, discovery, identity, and connection-manager ins
 5. Sending a text message results in exactly one incoming row and a delivered state on the sender.
 6. Opening a conversation clears its unread count and produces a signed read receipt that updates the sender to `READ`.
 7. Restarting either application preserves identity, trust, and chat history.
-8. A receiver can reject an offered file without receiving file bytes; an accepted file is published only after length
-   and SHA-256 verification.
+8. Automatic acceptance is the default. When confirmation is enabled, a receiver can reject an offered file without
+   receiving file bytes; an accepted file is published only after length and SHA-256 verification.
 9. Android and desktop unit tests pass, and physical Android/macOS/Windows interoperability is recorded before release.

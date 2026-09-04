@@ -26,6 +26,8 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 
 - [产品与通信协议 v1](spec/subnetdrop-v1.md)
 - [高速文件传输 v1](spec/file-transfer-v1.md)
+- [聊天时间线与输入布局 v1](spec/chat-timeline-ui-v1.md)
+- [渐进式媒体预览方案](design-docs/progressive-media-preview.md)
 
 ### 执行与验证：当前做到什么程度
 
@@ -33,6 +35,9 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [当前平台与桌面验证](tasks/verification/2026-09-04-current-platform-status.md)
 - [Android Navigation3 状态刷新验证](tasks/verification/2026-09-05-android-nav-state.md)
 - [UDP 设备发现与在线状态验证](tasks/verification/2026-09-05-udp-discovery.md)
+- [聊天时间线与 Android IME 验证](tasks/verification/2026-09-05-chat-timeline-ime.md)
+- [文件设置、系统打开与 Android 系统栏验证](tasks/verification/2026-09-05-file-settings-system-bars.md)
+- [暂存区自动提交 Skill 验证](tasks/verification/2026-09-05-staged-commit-skill.md)
 - [GitHub Actions 测试安装包验证](tasks/verification/2026-09-04-github-actions-test-packages.md)
 
 ## 系统上下文
@@ -99,6 +104,7 @@ sequenceDiagram
     B-->>A: Signed DELIVERY_ACK
     B-->>A: Signed READ_RECEIPT after opening chat
     A->>B: Signed FILE_OFFER
+    B->>B: Apply automatic or confirmation policy
     B-->>A: Signed FILE_DECISION
     A->>B: One accepted upload WebSocket
     A->>B: Signed FILE_STREAM_START
@@ -119,6 +125,7 @@ interface PeerDiscovery
 interface PairingService
 interface ChatTransport
 interface FileTransferService
+interface FileTransferSettingsRepository
 interface SecureMessageCodec
 interface ChatRepository
 interface PeerRepository
@@ -146,7 +153,8 @@ interface TrustedIdentityRepository
 | 私钥保护 | Android Keystore 包装本地 keyset | java-keyring 对接 Keychain / Credential Manager |
 | 数据库驱动 | SQLDelight Android driver | SQLDelight SQLite JDBC driver |
 | 文件选择 | FileKit Android provider | FileKit 原生桌面对话框 |
-| 接收目录 | 应用专属 external Downloads/SubnetDrop | `~/Downloads/SubnetDrop` |
+| 接收目录 | 默认应用专属 external Downloads/SubnetDrop；可选择 SAF 目录 | 默认 `~/Downloads/SubnetDrop`；可选择本地目录 |
+| 文件设置 | Multiplatform Settings + SharedPreferences | Multiplatform Settings + Preferences |
 | UI | Compose Android | Compose Desktop |
 
 平台适配状态和未验证边界以根 [README](../README.md#平台适配状态) 为准，构建命令以

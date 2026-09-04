@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Close
@@ -48,8 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.PlatformFile
+import io.github.vinceglb.filekit.dialogs.openFileWithDefaultApplication
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
 import ink.x2.subnetdrop.domain.model.FileTransfer
+import ink.x2.subnetdrop.domain.model.FileTransferDirection
 import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
@@ -75,13 +82,25 @@ fun ChatScreen(
         return
     }
     val launchFilePicker = rememberFilePickerLauncher(onSendFile, onFilePickerError)
-    val peerTransfers = transfers.filter { it.peerId == selection.peerId }.takeLast(MAX_VISIBLE_TRANSFERS)
-    Column(modifier.fillMaxSize()) {
-        ChatHeader(selection.peerDisplayName, showBack, onBack)
-        MessageList(messages, Modifier.weight(1f), onRetryMessage)
-        if (peerTransfers.isNotEmpty()) {
-            FileTransferPanel(peerTransfers, onCancelFile)
+    val openFile = { transfer: FileTransfer ->
+        runCatching {
+            FileKit.openFileWithDefaultApplication(PlatformFile(requireNotNull(transfer.localPath)))
+        }.onFailure { failure ->
+            onFilePickerError(failure.message ?: "无法使用系统应用打开文件")
         }
+        Unit
+    }
+    Column(modifier.fillMaxSize().imePadding()) {
+        ChatHeader(selection.peerDisplayName, showBack, onBack)
+        ChatTimeline(
+            messages = messages,
+            transfers = transfers,
+            peerId = selection.peerId,
+            modifier = Modifier.weight(1f),
+            onRetryMessage = onRetryMessage,
+            onCancelFile = onCancelFile,
+            onOpenFile = openFile,
+        )
         Composer(onSend, launchFilePicker)
     }
 }
@@ -146,14 +165,21 @@ private fun PeerAvatar(title: String) {
 }
 
 @Composable
-private fun MessageList(
+private fun ChatTimeline(
     messages: List<Message>,
+    transfers: List<FileTransfer>,
+    peerId: String,
     modifier: Modifier,
     onRetryMessage: (Message) -> Unit,
+    onCancelFile: (String) -> Unit,
+    onOpenFile: (FileTransfer) -> Unit,
 ) {
+    val timelineItems = remember(messages, transfers, peerId) {
+        buildChatTimeline(messages, transfers, peerId)
+    }
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    LaunchedEffect(timelineItems.size) {
+        if (timelineItems.isNotEmpty()) listState.animateScrollToItem(timelineItems.lastIndex)
     }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
@@ -161,8 +187,11 @@ private fun MessageList(
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(messages, key = Message::id) { message ->
-            MessageBubble(message, onRetryMessage)
+        items(timelineItems, key = ChatTimelineItem::stableKey) { item ->
+            when (item) {
+                is ChatTimelineItem.TextMessage -> MessageBubble(item.message, onRetryMessage)
+                is ChatTimelineItem.FileMessage -> FileTransferMessage(item.transfer, onCancelFile, onOpenFile)
+            }
         }
     }
 }
@@ -174,30 +203,40 @@ private fun MessageBubble(message: Message, onRetryMessage: (Message) -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
     ) {
-        Surface(
-            modifier = Modifier
-                .widthIn(min = MIN_BUBBLE_WIDTH, max = MAX_BUBBLE_WIDTH)
-                .heightIn(min = MIN_BUBBLE_HEIGHT),
-            shape = STRETCHABLE_BUBBLE_SHAPE,
-            color = if (outgoing) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
+        Column(
+            horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
         ) {
-            Column(Modifier.padding(horizontal = BUBBLE_HORIZONTAL_PADDING, vertical = BUBBLE_VERTICAL_PADDING)) {
-                Text(
-                    text = message.body,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (outgoing) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-                if (outgoing) {
-                    DeliveryState(message, onRetryMessage)
+            Surface(
+                modifier = Modifier
+                    .widthIn(min = MIN_BUBBLE_WIDTH, max = MAX_BUBBLE_WIDTH)
+                    .heightIn(min = MIN_BUBBLE_HEIGHT),
+                shape = STRETCHABLE_BUBBLE_SHAPE,
+                color = if (outgoing) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+            ) {
+                Box(
+                    modifier = Modifier.padding(
+                        horizontal = BUBBLE_HORIZONTAL_PADDING,
+                        vertical = BUBBLE_VERTICAL_PADDING,
+                    ),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(
+                        text = message.body,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (outgoing) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    )
                 }
+            }
+            if (outgoing) {
+                DeliveryState(message, onRetryMessage)
             }
         }
     }
@@ -208,7 +247,7 @@ private fun DeliveryState(message: Message, onRetryMessage: (Message) -> Unit) {
     val failed = message.status == DeliveryStatus.FAILED
     Row(
         modifier = Modifier
-            .padding(top = 4.dp)
+            .padding(top = 4.dp, end = 4.dp)
             .then(if (failed) Modifier.clickable { onRetryMessage(message) } else Modifier),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -236,56 +275,86 @@ private fun DeliveryState(message: Message, onRetryMessage: (Message) -> Unit) {
 }
 
 @Composable
-private fun FileTransferPanel(
-    transfers: List<FileTransfer>,
+private fun FileTransferMessage(
+    transfer: FileTransfer,
     onCancelFile: (String) -> Unit,
+    onOpenFile: (FileTransfer) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth().heightIn(max = MAX_TRANSFER_PANEL_HEIGHT),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(transfers, key = FileTransfer::id) { transfer ->
-            FileTransferCard(transfer, onCancelFile)
-        }
-    }
-}
-
-@Composable
-private fun FileTransferCard(transfer: FileTransfer, onCancelFile: (String) -> Unit) {
+    val outgoing = transfer.direction == FileTransferDirection.OUTGOING
     val cancellable = transfer.status == FileTransferStatus.PREPARING ||
         transfer.status == FileTransferStatus.WAITING_FOR_ACCEPTANCE ||
         transfer.status == FileTransferStatus.TRANSFERRING
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+    val canOpen = transfer.localPath != null &&
+        (outgoing || transfer.status == FileTransferStatus.COMPLETED) &&
+        transfer.status != FileTransferStatus.REJECTED && transfer.status != FileTransferStatus.CANCELLED
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            modifier = Modifier
+                .widthIn(max = MAX_FILE_MESSAGE_WIDTH)
+                .then(if (canOpen) Modifier.clickable { onOpenFile(transfer) } else Modifier),
+            shape = STRETCHABLE_BUBBLE_SHAPE,
+            color = if (outgoing) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
         ) {
-            Icon(Icons.Outlined.AttachFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                Text(transfer.fileName, maxLines = 1, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = "${transfer.status.label()} · ${formatFileSize(transfer.transferredBytes)} / " +
-                        formatFileSize(transfer.size),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (cancellable) {
-                    LinearProgressIndicator(
-                        progress = { transfer.progress },
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    modifier = Modifier.size(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Outlined.AttachFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                Column(
+                    Modifier
+                        .padding(start = 12.dp)
+                        .widthIn(max = MAX_FILE_CONTENT_WIDTH)
+                        .width(IntrinsicSize.Max),
+                ) {
+                    Text(transfer.fileName, maxLines = 2, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = transfer.summary(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (cancellable) {
+                        LinearProgressIndicator(
+                            progress = { transfer.progress },
+                            modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
+                        )
+                    }
+                    transfer.error?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
-                transfer.error?.let { error ->
-                    Text(error, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                }
-            }
-            if (cancellable) {
-                IconButton(onClick = { onCancelFile(transfer.id) }) {
-                    Icon(Icons.Outlined.Close, contentDescription = "取消文件传输")
+                if (cancellable) {
+                    IconButton(onClick = { onCancelFile(transfer.id) }) {
+                        Icon(Icons.Outlined.Close, contentDescription = "取消文件传输")
+                    }
+                } else if (canOpen) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.OpenInNew,
+                        contentDescription = "使用系统应用打开文件",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
                 }
             }
         }
@@ -301,7 +370,7 @@ private fun Composer(onSend: (String) -> Unit, onAttachFile: () -> Unit) {
     }
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp, shadowElevation = 2.dp) {
         Row(
-            modifier = Modifier.fillMaxWidth().imePadding().padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
@@ -385,12 +454,48 @@ private fun FileTransferStatus.label(): String = when (this) {
     FileTransferStatus.FAILED -> "传输失败"
 }
 
+private fun FileTransfer.summary(): String = when (status) {
+    FileTransferStatus.PREPARING,
+    FileTransferStatus.WAITING_FOR_ACCEPTANCE,
+    FileTransferStatus.TRANSFERRING,
+    -> "${status.label()} · ${formatFileSize(transferredBytes)} / ${formatFileSize(size)}"
+    FileTransferStatus.COMPLETED,
+    FileTransferStatus.REJECTED,
+    FileTransferStatus.CANCELLED,
+    FileTransferStatus.FAILED,
+    -> "${status.label()} · ${formatFileSize(size)}"
+}
+
+internal sealed interface ChatTimelineItem {
+    val createdAt: Long
+    val stableKey: String
+
+    data class TextMessage(val message: Message) : ChatTimelineItem {
+        override val createdAt: Long = message.createdAt
+        override val stableKey: String = "message:${message.id}"
+    }
+
+    data class FileMessage(val transfer: FileTransfer) : ChatTimelineItem {
+        override val createdAt: Long = transfer.createdAt
+        override val stableKey: String = "file:${transfer.id}"
+    }
+}
+
+internal fun buildChatTimeline(
+    messages: List<Message>,
+    transfers: List<FileTransfer>,
+    peerId: String,
+): List<ChatTimelineItem> = buildList {
+    messages.forEach { add(ChatTimelineItem.TextMessage(it)) }
+    transfers.filter { it.peerId == peerId }.forEach { add(ChatTimelineItem.FileMessage(it)) }
+}.sortedWith(compareBy<ChatTimelineItem>(ChatTimelineItem::createdAt).thenBy(ChatTimelineItem::stableKey))
+
 private val MAX_BUBBLE_WIDTH = 560.dp
+private val MAX_FILE_MESSAGE_WIDTH = 440.dp
+private val MAX_FILE_CONTENT_WIDTH = 320.dp
 private val MIN_BUBBLE_WIDTH = 64.dp
 private val MIN_BUBBLE_HEIGHT = 48.dp
 private val BUBBLE_HORIZONTAL_PADDING = 14.dp
 private val BUBBLE_VERTICAL_PADDING = 10.dp
 private val STRETCHABLE_BUBBLE_SHAPE = RoundedCornerShape(14.dp)
-private val MAX_TRANSFER_PANEL_HEIGHT = 180.dp
 private const val MAX_MESSAGE_LENGTH = 8_192
-private const val MAX_VISIBLE_TRANSFERS = 3

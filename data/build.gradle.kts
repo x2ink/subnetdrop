@@ -23,6 +23,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             implementation(libs.kotlinx.coroutinesCore)
+            implementation(libs.multiplatform.settings)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines)
         }
@@ -35,6 +36,7 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutinesTest)
+            implementation(libs.multiplatform.settings.test)
         }
     }
 }

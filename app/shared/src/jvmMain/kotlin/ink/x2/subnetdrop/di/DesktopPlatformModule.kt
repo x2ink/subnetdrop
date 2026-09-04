@@ -1,5 +1,7 @@
 package ink.x2.subnetdrop.di
 
+import com.russhwolf.settings.PreferencesSettings
+import com.russhwolf.settings.Settings
 import ink.x2.subnetdrop.data.DatabaseDriverFactory
 import ink.x2.subnetdrop.data.DesktopDatabaseDriverFactory
 import ink.x2.subnetdrop.domain.port.ChatTransport
@@ -19,8 +21,12 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import java.io.File
 import java.util.UUID
+import java.util.prefs.Preferences
 
 val desktopPlatformModule = module {
+    single<Settings> {
+        PreferencesSettings(Preferences.userRoot().node("ink/x2/subnetdrop/file-transfer"))
+    }
     single<DatabaseDriverFactory> {
         DesktopDatabaseDriverFactory(File(desktopDataDirectory(), "subnetdrop.db"))
     }
@@ -38,7 +44,7 @@ val desktopPlatformModule = module {
             secureMessageCodec = get(),
             timestampProvider = get(),
             idGenerator = get(),
-            receivedFilesDirectory = desktopReceivedFilesDirectory(),
+            fileTransferSettingsRepository = get(),
         )
     }
     single<ChatTransport> { get<SubnetDropTransport>() }
@@ -46,6 +52,7 @@ val desktopPlatformModule = module {
     single<FileTransferService> { get<SubnetDropTransport>() }
     single<PairingService> { get<SubnetDropTransport>() }
     single(named(DEFAULT_DISPLAY_NAME_QUALIFIER)) { defaultDesktopDeviceName() }
+    single(named(DEFAULT_SAVE_DIRECTORY_QUALIFIER)) { desktopReceivedFilesDirectory().path }
 }
 
 private fun desktopDataDirectory(): File {

@@ -18,7 +18,8 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 - **显式建立信任**：双方核对相同的六位安全码后才保存公钥；已配对设备密钥变化会进入阻断状态。
 - **加密文字聊天**：Google Tink HPKE 保护聊天正文，Ed25519 认证发送者和文件控制帧。
 - **可靠一对一聊天**：支持本地历史、幂等去重、失败重试、签名送达 ACK、未读计数和签名已读回执。
-- **确认后高速传文件**：使用 512 KiB 原始二进制分块，无 HPKE、无 Base64、无逐块 ACK，最终以长度和 SHA-256 验证。
+- **消息式高速传文件**：文件卡片与文字一起排列在聊天时间线中；默认自动接收，也可开启逐文件确认，保存目录可配置。
+- **系统文件体验**：接收完成后可从消息卡片调用系统默认应用打开，传输使用 512 KiB 原始二进制分块并做长度与 SHA-256 验证。
 - **共享跨平台 UI**：Compose Multiplatform Material 3 统一实现，自适应紧凑导航和桌面双栏布局。
 
 ## 平台适配状态
@@ -48,7 +49,8 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 | 本地数据库 | SQLDelight | 2.3.2 | 类型安全 SQLite、会话、信任和消息状态 |
 | 密码学 | Google Tink | 1.23.0 | HPKE 与 Ed25519，不自行实现密码算法 |
 | 局域网发现 | UDP multicast + Ktor probe | JDK / Ktor | 主动公告、单播响应、可达确认和心跳超时 |
-| 文件选择 | FileKit | 0.15.0 | Compose Multiplatform 原生文件选择 |
+| 文件与目录 | FileKit | 0.15.0 | 原生文件/目录选择、跨平台文件 I/O 和系统默认应用打开 |
+| 跨平台设置 | Multiplatform Settings | 1.3.0 | 持久化接收确认策略和文件保存目录 |
 | 桌面凭据 | java-keyring | 1.0.4 | 对接 macOS Keychain / Windows Credential Manager |
 | 构建 | Gradle / Android Gradle Plugin | 9.1.0 / 9.0.1 | 多模块构建、Android 与桌面分发 |
 | 持续构建 | GitHub Actions | Hosted Runners | 生成 Android、Windows x64、macOS arm64/x64 测试包 |
@@ -97,7 +99,9 @@ flowchart LR
 2. 启动应用并允许局域网通信；macOS/Windows 防火墙弹窗应允许专用网络访问。
 3. 在“附近设备”选择对端，两边核对并确认相同的六位安全码。
 4. 进入一对一会话发送消息；使用输入框旁的回形针按钮选择文件。
-5. 对端接受后才开始传输。桌面文件保存到 `~/Downloads/SubnetDrop`，同名文件不会被覆盖。
+5. 对端默认自动接收；如需逐次决定，可在“设置”开启“接收文件前确认”。
+6. 可在“设置”修改文件保存位置；默认桌面目录为 `~/Downloads/SubnetDrop`，同名文件不会被覆盖。
+7. 接收完成后点击文件消息，使用操作系统默认应用打开。
 
 发现失败时，优先检查设备是否处于同一可达网段、VPN 是否接管局域网、路由器是否启用 AP 隔离，以及系统
 防火墙是否放行 TCP `45892` 和 UDP `45893`。
@@ -137,10 +141,12 @@ Debug APK、Windows x64 MSI、macOS Apple Silicon DMG 和 macOS Intel DMG。构�
 - 聊天正文使用 HPKE 端到端加密；文件内容为局域网明文二进制流，文件控制帧、ACK 和已读回执由 Ed25519 签名。
 - 私钥保存在 Android Keystore 或桌面系统凭据存储中，不写入 SQLite。
 - 接收文件先写临时文件，仅在顺序、总长度和 SHA-256 全部通过后发布到下载目录。
+- 默认自动接收意味着已信任设备可以主动占用本机带宽和磁盘；可在设置中开启逐文件确认。
 - 当前 SQLite 中的聊天正文仍是本地明文；“传输端到端加密”不等于“数据库静态加密”。
 - 当前 HPKE 方案不声明前向保密；未来若引入 Noise / Double Ratchet，需要升级协议而不是静默替换。
 - 文件原始字节不提供机密性；同一局域网中能观察流量的主体可能读取文件内容。需要保密文件时应在发送前自行加密。
-- SubnetDrop 参考 LocalSend 的“先发元数据、接收方确认、再上传”思路，但不是 LocalSend 协议兼容实现。
+- SubnetDrop 参考 LocalSend 的“先发元数据、建立上传会话”思路，但由本机设置决定自动接受或人工确认，
+  也不是 LocalSend 协议兼容实现。
 
 ## 当前限制与路线图
 
@@ -148,6 +154,7 @@ Debug APK、Windows x64 MSI、macOS Apple Silicon DMG 和 macOS Intel DMG。构�
 - 完成 macOS 签名与公证，并验证发布身份下的 Keychain 隔离。
 - 加密本地消息正文，补充密钥轮换与数据库迁移设计。
 - 拆分当前传输实现中的聊天、配对和文件会话职责，不改变协议行为。
+- 实现受控的应用内渐进式媒体数据源和播放器；当前边收边写磁盘，但不把系统应用打开误写成可靠边收边播。
 - 对外发布前补充明确的开源许可证；当前仓库尚未包含 `LICENSE` 文件。
 
 ## 文档
@@ -172,4 +179,5 @@ bash scripts/setup-git-hooks.sh
 
 此后直接执行 `git commit`，终端会引导选择 `feat`、`fix`、`docs`、`refactor` 等 Conventional Commit
 类型，生成 `type(scope): subject`，不会自动附加任务号或额外 footer。Hook 不会自动推送；仓库内的
-`.agents/skills/staged-commit-message` 也只根据暂存区生成建议，不会提交或 push。
+`.agents/skills/staged-commit-message` 只根据暂存区生成 message；明确要求 commit 时会提交已有暂存内容，
+不会自动暂存、amend 或 push。

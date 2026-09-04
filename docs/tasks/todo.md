@@ -1,5 +1,37 @@
 # SubnetDrop 任务状态
 
+## 当前计划：暂存区自动提交 Skill
+
+- [x] 将 Skill 区分为只生成 message 和明确授权后 commit 两种模式。
+- [x] commit 模式只使用已有暂存区，不自动暂存、amend、push 或跳过 hooks。
+- [x] 同步 Skill UI 元数据、AGENTS.md 与 README 中的调用说明。
+- [x] 运行 Skill validator 和差异检查，记录验证结果。
+
+## 当前计划：聊天消息内容自适应
+
+- [x] 让文字正文在最小高度气泡中垂直居中，多行内容仍按 padding 自然增长。
+- [x] 移除文件消息固定最小宽度和内部强制填满宽度，按文件名、状态和操作图标自适应。
+- [x] 运行共享 JVM/Android 编译与差异检查，不安装 Android APK，并记录验证结果。
+
+## 当前计划：可配置文件接收与平台文件体验
+
+- [x] 新增持久化文件设置：默认自动接收，可选开启每次接收确认，并可选择保存目录。
+- [x] 调整文件协议：自动模式收到 offer 后直接准备写盘并开始传输，确认模式保留接受/拒绝流程。
+- [x] 使用 FileKit 的目录选择和跨平台默认应用打开能力，文件卡片可点击打开已完成文件。
+- [x] 保留接收中媒体的真实扩展名，明确系统打开不等于可靠渐进播放，并形成应用内预览设计。
+- [x] 修正 Android edge-to-edge 系统栏样式，状态栏和导航栏透明并使用一致的内容背景。
+- [x] 补充设置、协议分支和文件路径测试，运行共享、数据、网络、Android 与桌面验证，不安装 APK。
+- [x] 更新规格、原理、README、经验与验证记录。
+
+## 当前计划：聊天文件消息与 Android 键盘布局
+
+- [x] 将文本消息和当前会话的文件传输合并为同一个按时间排序的聊天时间线。
+- [x] 将文件卡片改为按收发方向对齐的消息项，保留进度、状态、错误和取消操作。
+- [x] 将文字消息的发送/已读状态移到气泡下方，避免状态改变正文气泡布局。
+- [x] 调整 Android IME inset 与窗口 resize，让输入栏始终贴在键盘顶部且消息列表自行缩放。
+- [x] 补充时间线排序测试，运行共享 JVM 测试、network 回归和 Android/桌面编译。
+- [x] 更新审查记录、经验与验证证据；不安装 Android APK。
+
 ## 当前计划：低延迟设备发现与在线状态
 
 - [x] 将设备发现从平台 mDNS/DNS-SD 解析改为共享 UDP 组播公告，启动时按短间隔突发重试。
@@ -70,6 +102,38 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+文字消息的最小高度此前只加在 `Surface`，内部 `Text` 没有对齐容器，因此短文本会按起始位置布局；现在由
+`CenterStart` 的 `Box` 在保留水平/垂直 padding 的同时完成单行垂直居中，多行仍自然增高。文件消息移除了
+260dp 固定最小宽度、内部 Row 的 `fillMaxWidth` 和 Column 的填满型 `weight`，改由文字与状态的 intrinsic width
+决定实际宽度，440dp 只作为桌面端最大宽度保护。共享 JVM 测试、Android shared 编译和桌面编译通过，未安装 APK；
+证据补充在 [`verification/2026-09-05-chat-timeline-ime.md`](./verification/2026-09-05-chat-timeline-ime.md)。
+
+文件接收策略现在由持久化 `FileTransferSettingsRepository` 统一提供，默认
+`requireIncomingConfirmation=false`。可信对端的合法 offer 在默认模式下会立即准备目标文件并返回签名接受决策；
+开启“接收文件前确认”后才进入 `WAITING_FOR_ACCEPTANCE` 并显示接受/拒绝对话框。该设置不是 UI 临时状态，
+Android 使用 SharedPreferences、桌面使用 Preferences，传输层在每个 offer 到达时读取当前值。
+
+设置页通过 FileKit 选择保存目录。Android 对 SAF 目录创建 FileKit bookmark 以保留 URI 权限，桌面保存本地路径；
+接收中数据写入保留原扩展名的隐藏临时目录，通过长度和 SHA-256 校验后才发布。发送侧源文件和已完成接收文件
+可以从消息卡片调用系统默认应用打开，未校验完成的接收文件不会交给外部应用。
+
+当前“流式传输”是边收边写磁盘，并不宣称“边收边播”。外部播放器对增长中文件没有统一读取契约，MP4 索引也
+可能在文件尾部；可靠方案需要应用内播放器与可等待尚未到达字节的受控数据源，已记录在
+[`design-docs/progressive-media-preview.md`](../design-docs/progressive-media-preview.md)。Android 两个系统栏改为透明，
+并关闭 Android 10+ 三键导航强制对比色遮罩。数据、网络和共享 JVM 测试、Android Debug APK、桌面编译全部通过；
+按用户要求未安装 APK。证据见
+[`verification/2026-09-05-file-settings-system-bars.md`](./verification/2026-09-05-file-settings-system-bars.md)。
+
+聊天页不再维护独立的固定高度文件面板。展示层使用带命名空间稳定 key 的统一时间线，将 SQLDelight 文字消息
+和当前会话 `FileTransfer` 状态按 `createdAt` 排序；文件卡片根据方向左右对齐，传输进度、失败原因和取消动作
+保留在卡片内。文件传输进度仍只保留当前进程会话，本轮没有伪装成可跨重启恢复的数据库消息。
+
+文字消息气泡现在只测量正文，发送、未读、已读和失败重试状态位于气泡下方。Android 输入栏的
+`imePadding` 从内部 Row 移到聊天页外层，Activity 使用 `adjustResize`；根 Scaffold 的系统栏 padding 被显式
+消费，避免系统导航栏和 IME 底部高度重复计算。共享/网络 JVM 测试、Android Debug APK 和桌面编译通过；
+按用户要求没有安装 Android APK，因此真实手机键盘贴合仍需后续真机交互确认。证据见
+[`verification/2026-09-05-chat-timeline-ime.md`](./verification/2026-09-05-chat-timeline-ime.md)。
 
 设备发现已从 Android NSD / 桌面 JmDNS 的“发现后再解析”改为共享 UDP 主动公告。两端在启动后的
 100 ms、500 ms、2 s 发出公告，接收端使用报文源 IP 与声明端口进行 Ktor WebSocket PING；只有收到身份路由

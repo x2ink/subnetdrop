@@ -6,6 +6,7 @@ import ink.x2.subnetdrop.domain.model.DeviceProfile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.domain.model.FileTransferStatus
+import ink.x2.subnetdrop.domain.model.FileTransferSettings
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.PeerAvailability
@@ -15,6 +16,7 @@ import ink.x2.subnetdrop.domain.model.conversationIdFor
 import ink.x2.subnetdrop.domain.port.ChatRepository
 import ink.x2.subnetdrop.domain.port.DeviceProfileRepository
 import ink.x2.subnetdrop.domain.port.IdGenerator
+import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PeerRepository
 import ink.x2.subnetdrop.domain.port.TrustedIdentityRepository
 import ink.x2.subnetdrop.network.crypto.SecureKeyValueStore
@@ -23,6 +25,7 @@ import ink.x2.subnetdrop.network.identity.LocalIdentityService
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -93,7 +96,7 @@ class SubnetDropTransportTest {
     }
 
     @Test
-    fun offersAcceptsAndTransfersFileThroughBinaryStream() {
+    fun automaticallyAcceptsAndTransfersFileThroughBinaryStreamByDefault() {
         runBlocking {
             val alice = TestNode("alice-file", availablePort())
             val bob = TestNode("bob-file", availablePort())
@@ -103,26 +106,26 @@ class SubnetDropTransportTest {
             bob.transport.start()
             try {
                 alice.pairWith(bob)
+                val customSaveDirectory = File(bob.workingDirectory, "chosen-downloads")
+                bob.fileSettings.updateSaveDirectory(customSaveDirectory.path)
                 val sourceBytes = ByteArray(1_300_000) { index -> (index % 251).toByte() }
                 val source = File(alice.workingDirectory, "transfer sample.bin").apply {
                     writeBytes(sourceBytes)
                 }
-                val sending = async {
-                    alice.transport.sendFile(
-                        bob.id,
-                        LocalFile(source.name, source.path, source.length(), "application/octet-stream"),
-                    )
-                }
-                val offer = withTimeout(5_000L) {
-                    bob.transport.incomingOffers.first { it.isNotEmpty() }.single()
-                }
-                bob.transport.acceptOffer(offer.transferId)
-                sending.await()
+                alice.transport.sendFile(
+                    bob.id,
+                    LocalFile(source.name, source.path, source.length(), "application/octet-stream"),
+                )
 
                 val outgoing = alice.transport.transfers.value.single()
                 val incoming = bob.transport.transfers.value.single()
+                assertTrue(bob.transport.incomingOffers.value.isEmpty())
                 assertEquals(FileTransferStatus.COMPLETED, outgoing.status)
                 assertEquals(FileTransferStatus.COMPLETED, incoming.status)
+                assertEquals(1_000L, outgoing.createdAt)
+                assertEquals(1_000L, incoming.createdAt)
+                assertEquals("application/octet-stream", incoming.contentType)
+                assertEquals(File(customSaveDirectory, source.name).path, incoming.localPath)
                 assertContentEquals(sourceBytes, File(requireNotNull(incoming.localPath)).readBytes())
             } finally {
                 alice.transport.stop()
@@ -142,6 +145,7 @@ class SubnetDropTransportTest {
             bob.transport.start()
             try {
                 alice.pairWith(bob)
+                bob.fileSettings.updateRequireIncomingConfirmation(true)
                 val source = File(alice.workingDirectory, "private.txt").apply { writeText("not accepted") }
                 val sending = async {
                     alice.transport.sendFile(bob.id, LocalFile(source.name, source.path, source.length()))
@@ -155,6 +159,39 @@ class SubnetDropTransportTest {
                 assertEquals(FileTransferStatus.REJECTED, alice.transport.transfers.value.single().status)
                 assertEquals(FileTransferStatus.REJECTED, bob.transport.transfers.value.single().status)
                 assertEquals(false, File(bob.workingDirectory, "received").exists())
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
+
+    @Test
+    fun transfersAfterExplicitAcceptanceWhenConfirmationIsEnabled() {
+        runBlocking {
+            val alice = TestNode("alice-confirm", availablePort())
+            val bob = TestNode("bob-confirm", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                bob.fileSettings.updateRequireIncomingConfirmation(true)
+                val source = File(alice.workingDirectory, "accepted.txt").apply { writeText("accepted") }
+                val sending = async {
+                    alice.transport.sendFile(bob.id, LocalFile(source.name, source.path, source.length()))
+                }
+                val offer = withTimeout(5_000L) {
+                    bob.transport.incomingOffers.first { it.isNotEmpty() }.single()
+                }
+
+                assertEquals(FileTransferStatus.WAITING_FOR_ACCEPTANCE, bob.transport.transfers.value.single().status)
+                bob.transport.acceptOffer(offer.transferId)
+                sending.await()
+
+                assertEquals(FileTransferStatus.COMPLETED, alice.transport.transfers.value.single().status)
+                assertEquals(FileTransferStatus.COMPLETED, bob.transport.transfers.value.single().status)
             } finally {
                 alice.transport.stop()
                 bob.transport.stop()
@@ -180,6 +217,7 @@ private class TestNode(
     )
     private val peers = TestPeerRepository()
     val chatRepository = TestChatRepository()
+    val fileSettings = TestFileTransferSettingsRepository(File(workingDirectory, "received").path)
     val trustedIdentities = TestTrustedIdentityRepository(peers)
     val transport = SubnetDropTransport(
         localIdentityService = identityService,
@@ -189,7 +227,7 @@ private class TestNode(
         secureMessageCodec = codec,
         timestampProvider = { 1_000L },
         idGenerator = IdGenerator { "$id-transfer-${transferSequence++}" },
-        receivedFilesDirectory = File(workingDirectory, "received"),
+        fileTransferSettingsRepository = fileSettings,
         listenerPort = port,
     )
 
@@ -225,6 +263,19 @@ private class TestNode(
         other.transport.requestPairing(id)
         transport.confirmPairing(other.id)
         other.transport.confirmPairing(id)
+    }
+}
+
+private class TestFileTransferSettingsRepository(defaultDirectory: String) : FileTransferSettingsRepository {
+    private val mutableSettings = MutableStateFlow(FileTransferSettings(defaultDirectory))
+    override val settings: StateFlow<FileTransferSettings> = mutableSettings
+
+    override suspend fun updateSaveDirectory(path: String) {
+        mutableSettings.value = mutableSettings.value.copy(saveDirectory = path)
+    }
+
+    override suspend fun updateRequireIncomingConfirmation(required: Boolean) {
+        mutableSettings.value = mutableSettings.value.copy(requireIncomingConfirmation = required)
     }
 }
 

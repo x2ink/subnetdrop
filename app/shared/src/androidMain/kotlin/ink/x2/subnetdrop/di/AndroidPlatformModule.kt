@@ -3,6 +3,8 @@ package ink.x2.subnetdrop.di
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import com.russhwolf.settings.Settings
+import com.russhwolf.settings.SharedPreferencesSettings
 import ink.x2.subnetdrop.data.AndroidDatabaseDriverFactory
 import ink.x2.subnetdrop.data.DatabaseDriverFactory
 import ink.x2.subnetdrop.domain.port.ChatTransport
@@ -25,6 +27,11 @@ import java.util.UUID
 
 val androidPlatformModule = module {
     single<DatabaseDriverFactory> { AndroidDatabaseDriverFactory(androidContext()) }
+    single<Settings> {
+        SharedPreferencesSettings(
+            androidContext().getSharedPreferences(FILE_SETTINGS_NAME, Context.MODE_PRIVATE),
+        )
+    }
     single<SecureKeyValueStore> { AndroidSecureKeyValueStore(androidContext()) }
     single<SecureMessageCodec> { TinkSecureMessageCodec(get()) }
     single<TimestampProvider> { TimestampProvider(System::currentTimeMillis) }
@@ -39,9 +46,7 @@ val androidPlatformModule = module {
             secureMessageCodec = get(),
             timestampProvider = get(),
             idGenerator = get(),
-            receivedFilesDirectory = requireNotNull(
-                androidContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            ).resolve("SubnetDrop"),
+            fileTransferSettingsRepository = get(),
         )
     }
     single<ChatTransport> { get<SubnetDropTransport>() }
@@ -49,10 +54,17 @@ val androidPlatformModule = module {
     single<FileTransferService> { get<SubnetDropTransport>() }
     single<PairingService> { get<SubnetDropTransport>() }
     single(named(DEFAULT_DISPLAY_NAME_QUALIFIER)) { defaultAndroidDeviceName(androidContext()) }
+    single(named(DEFAULT_SAVE_DIRECTORY_QUALIFIER)) { defaultAndroidSaveDirectory(androidContext()) }
 }
+
+private fun defaultAndroidSaveDirectory(context: Context): String = requireNotNull(
+    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+).resolve("SubnetDrop").path
 
 private fun defaultAndroidDeviceName(context: Context): String {
     val appName = context.applicationInfo.loadLabel(context.packageManager).toString()
     val model = Build.MODEL?.trim().orEmpty()
     return if (model.isEmpty()) appName else "$appName · $model"
 }
+
+private const val FILE_SETTINGS_NAME = "file-transfer-settings"

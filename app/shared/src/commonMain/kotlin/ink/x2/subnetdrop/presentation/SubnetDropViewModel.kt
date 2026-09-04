@@ -10,6 +10,7 @@ import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.domain.model.conversationIdFor
 import ink.x2.subnetdrop.domain.port.FileTransferService
+import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PairingCandidate
 import ink.x2.subnetdrop.domain.port.PairingService
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
@@ -42,6 +43,7 @@ class SubnetDropViewModel(
     private val markConversationRead: MarkConversationReadUseCase,
     private val pairingService: PairingService,
     private val fileTransferService: FileTransferService,
+    private val fileTransferSettingsRepository: FileTransferSettingsRepository,
 ) : ViewModel() {
     private val mutableSelection = MutableStateFlow<ChatSelection?>(null)
     private val mutableNotice = MutableStateFlow<UiNotice?>(null)
@@ -57,6 +59,7 @@ class SubnetDropViewModel(
     val section = mutableSection.asStateFlow()
     val incomingFileOffers = fileTransferService.incomingOffers
     val fileTransfers = fileTransferService.transfers
+    val fileTransferSettings = fileTransferSettingsRepository.settings
     val messages = mutableSelection
         .flatMapLatest { selected ->
             selected?.let { observeMessages(it.conversationId) } ?: flowOf(emptyList())
@@ -151,6 +154,15 @@ class SubnetDropViewModel(
 
     fun cancelFile(transferId: String) = launchAction("取消文件失败") {
         fileTransferService.cancelTransfer(transferId)
+    }
+
+    fun updateSaveDirectory(path: String) = launchAction("保存目录更新失败") {
+        fileTransferSettingsRepository.updateSaveDirectory(path)
+        mutableNotice.value = UiNotice("文件保存目录已更新", isError = false)
+    }
+
+    fun updateIncomingFileConfirmation(required: Boolean) = launchAction("接收设置更新失败") {
+        fileTransferSettingsRepository.updateRequireIncomingConfirmation(required)
     }
 
     fun reportFilePickerError(message: String) {
