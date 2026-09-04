@@ -159,6 +159,6 @@ Node、npm 和 Yarn 下载均已配置国内镜像，不要求修改用户全局
 bash scripts/setup-git-hooks.sh
 ```
 
-之后直接运行 `git commit`，终端会引导选择 `feat`、`fix`、`docs`、`refactor` 等类型、影响范围、描述和
-任务号，并自动生成 remote review `review footer`。不符合规范的 `git commit -m` 会被拒绝；符合 Conventional Commit
-格式的自动化提交仍可使用 `-m`。推送前会自动执行桌面/JVM 回归检查。
+此后直接执行 `git commit`，终端会引导选择 `feat`、`fix`、`docs`、`refactor` 等 Conventional Commit
+类型。Hook 不会自动推送；仓库内的 `.agents/skills/staged-commit-message` 也只根据暂存区生成建议，不会提交
+或 push。

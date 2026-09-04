@@ -1,0 +1,7 @@
+interface:
+  display_name: "Staged Commit Message"
+  short_description: "Generate a commit message from staged changes"
+  default_prompt: "Use $staged-commit-message to analyze the current staging area and propose a commit message without committing or pushing."
+
+policy:
+  allow_implicit_invocation: true

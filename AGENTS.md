@@ -112,6 +112,9 @@ flowchart LR
 
 ## Git discipline
 
+- 用户要求“根据暂存区生成 commit message / 提交信息”时，必须完整读取并遵守
+  `.agents/skills/staged-commit-message/SKILL.md`。该 Skill 支持自动匹配，也可以通过
+  `$staged-commit-message` 显式调用；它只读暂存区，只输出建议，不得提交、amend 或 push。
 - 新环境先运行 `bash scripts/setup-git-hooks.sh`。日常提交使用 `git commit` 进入交互式 Conventional Commit
   构建器，不手写不符合规范的提交信息。
 - 未经明确要求不创建提交、不推送、不合并。
