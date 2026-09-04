@@ -116,7 +116,7 @@ flowchart LR
   `.agents/skills/staged-commit-message/SKILL.md`。该 Skill 支持自动匹配，也可以通过
   `$staged-commit-message` 显式调用；它只读暂存区，只输出建议，不得提交、amend 或 push。
 - 新环境先运行 `bash scripts/setup-git-hooks.sh`。日常提交使用 `git commit` 进入交互式 Conventional Commit
-  构建器，不手写不符合规范的提交信息。
+  构建器，提交格式为 `type(scope): subject`，不自动追加任务号或额外 footer。
 - 未经明确要求不创建提交、不推送、不合并。
 - 禁止 `--no-verify`、直接推送目标分支和 `git push --force`。
 - 不修改、覆盖或清理与当前任务无关的工作区及暂存区内容。

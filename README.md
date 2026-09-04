@@ -170,5 +170,5 @@ bash scripts/setup-git-hooks.sh
 ```
 
 此后直接执行 `git commit`，终端会引导选择 `feat`、`fix`、`docs`、`refactor` 等 Conventional Commit
-类型。Hook 不会自动推送；仓库内的 `.agents/skills/staged-commit-message` 也只根据暂存区生成建议，不会提交
-或 push。
+类型，生成 `type(scope): subject`，不会自动附加任务号或额外 footer。Hook 不会自动推送；仓库内的
+`.agents/skills/staged-commit-message` 也只根据暂存区生成建议，不会提交或 push。

@@ -15,7 +15,9 @@
       "Bash(rm docs/tasks/verification/desktop-uniform-chat-bubbles.png)",
       "Bash(rm docs/assets/screenshots/subnetdrop-macos.png)",
       "Bash(rm skills/staged-commit-message/SKILL.md)",
-      "Bash(rm skills/staged-commit-message/agents/openai.yaml)"
+      "Bash(rm skills/staged-commit-message/agents/openai.yaml)",
+      "Bash(rm .githooks/commit-msg)",
+      "Bash(rm .git/hooks/commit-msg)"
     ]
   }
 }

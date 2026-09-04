@@ -20,8 +20,9 @@ Windows PowerShell/CMD 将下文的 `./gradlew` 替换为 `gradlew.bat`。
 bash scripts/setup-git-hooks.sh
 ```
 
-之后使用 `git commit` 进入 Conventional Commit 交互选择。共享 hook 位于 `.githooks/`，本地激活副本位于
-`.git/hooks/`；修改共享 hook 后需要重新运行安装脚本同步。
+之后使用 `git commit` 进入 Conventional Commit 交互选择，生成 `type(scope): subject`，不自动追加任务号
+或额外 footer。共享 hook 位于 `.githooks/`，本地激活副本位于 `.git/hooks/`；修改共享 hook 后需要
+重新运行安装脚本同步。
 
 ## GitHub Actions 测试安装包
 
