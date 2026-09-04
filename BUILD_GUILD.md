@@ -23,6 +23,28 @@ bash scripts/setup-git-hooks.sh
 之后使用 `git commit` 进入 Conventional Commit 交互选择。共享 hook 位于 `.githooks/`，本地激活副本位于
 `.git/hooks/`；修改共享 hook 后需要重新运行安装脚本同步。
 
+## GitHub Actions 测试安装包
+
+仓库包含 `.github/workflows/build-test-packages.yml`，用于在 GitHub 托管的目标系统 Runner 上生成未签名测试包。
+工作流不会发布 Release、安装应用或向仓库写入内容，只会上传保留 14 天的 Actions Artifacts：
+
+| Artifact | Runner | 内容 |
+|---|---|---|
+| `subnetdrop-android-debug-*` | Ubuntu 24.04 x64 | Android Debug APK |
+| `subnetdrop-macos-arm64-*` | macOS 15 Apple Silicon | 未签名 DMG |
+| `subnetdrop-macos-x64-*` | macOS 15 Intel | 未签名 DMG |
+| `subnetdrop-windows-x64-*` | Windows Server 2025 x64 | 未签名 MSI |
+
+触发方式：
+
+1. 打开 GitHub 仓库的 `Actions` 页面，选择 `Build test packages`，点击 `Run workflow` 手动构建。
+2. 或推送名称匹配 `v*` 的标签，例如 `v0.1.0-test.1`，自动触发同一流程。
+3. 构建完成后打开对应 workflow run，在页面底部的 `Artifacts` 区域下载。
+
+工作流使用 Azul JDK 21、仓库 Gradle Wrapper 和项目已有国内依赖镜像。Android job 会先运行 JVM 回归与
+`lintDebug`；任何测试、打包或产物查找失败都会让对应 job 失败。测试包未配置发布证书，Windows SmartScreen
+和 macOS Gatekeeper 可能要求测试者手动确认来源后运行。
+
 ## 环境与工程检查
 
 ```shell

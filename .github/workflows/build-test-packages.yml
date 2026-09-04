@@ -1,0 +1,115 @@
+name: Build test packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-packages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android Debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Azul JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Test and build Android package
+        run: >-
+          ./gradlew
+          :core:jvmTest
+          :data:jvmTest
+          :network:jvmTest
+          :app:shared:jvmTest
+          :app:androidApp:lintDebug
+          :app:androidApp:assembleDebug
+          :app:desktopApp:compileKotlin
+          --stacktrace
+
+      - name: Upload Android package
+        uses: actions/upload-artifact@v6
+        with:
+          name: subnetdrop-android-debug-${{ github.run_number }}
+          path: app/androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  desktop:
+    name: ${{ matrix.displayName }}
+    needs: android
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - displayName: macOS Apple Silicon DMG
+            platform: macos-arm64
+            runner: macos-15
+            gradleCommand: ./gradlew
+            gradleTask: :app:desktopApp:packageDmg
+            artifactPath: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
+          - displayName: macOS Intel DMG
+            platform: macos-x64
+            runner: macos-15-intel
+            gradleCommand: ./gradlew
+            gradleTask: :app:desktopApp:packageDmg
+            artifactPath: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
+          - displayName: Windows x64 MSI
+            platform: windows-x64
+            runner: windows-2025
+            gradleCommand: ./gradlew.bat
+            gradleTask: :app:desktopApp:packageMsi
+            artifactPath: app/desktopApp/build/compose/binaries/main/msi/*.msi
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Azul JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Build desktop package
+        run: ${{ matrix.gradleCommand }} ${{ matrix.gradleTask }} --stacktrace
+
+      - name: Upload desktop package
+        uses: actions/upload-artifact@v6
+        with:
+          name: subnetdrop-${{ matrix.platform }}-${{ github.run_number }}
+          path: ${{ matrix.artifactPath }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

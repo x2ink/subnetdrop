@@ -26,7 +26,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 |---|---:|---|---|
 | Android | Android 11 / API 30+ | 核心功能已实现；Android 与 macOS 的发现、配对、双向加密聊天和持久化已有真机验证记录 | FileKit 替换后的文件选择与当前品牌版本需要再次真机回归；发布包需补完整权限与后台策略验证 |
 | macOS | 当前受支持版本 | JVM 回归、桌面编译、DMG 打包和当前应用启动通过；本页截图来自当前构建 | 正式签名、公证和发布身份下的 Keychain 隔离验证 |
-| Windows | Windows 10+ | 共用 Desktop JVM 实现并已配置 MSI 目标 | 必须在 Windows 主机构建 MSI，并验证防火墙引导、凭据存储、设备发现和三端互通 |
+| Windows | Windows 10+ | 共用 Desktop JVM 实现，并已配置 Windows GitHub Actions Runner 构建 MSI | 首次远程 MSI 构建尚待运行；之后仍需验证防火墙引导、凭据存储、设备发现和三端互通 |
 
 原生安装包必须在目标操作系统构建。当前最完整的开发验证环境是 macOS；上表不会把“代码可编译”描述成
 “平台已完整验收”。
@@ -50,6 +50,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 | 文件选择 | FileKit | 0.15.0 | Compose Multiplatform 原生文件选择 |
 | 桌面凭据 | java-keyring | 1.0.4 | 对接 macOS Keychain / Windows Credential Manager |
 | 构建 | Gradle / Android Gradle Plugin | 9.1.0 / 9.0.1 | 多模块构建、Android 与桌面分发 |
+| 持续构建 | GitHub Actions | Hosted Runners | 生成 Android、Windows x64、macOS arm64/x64 测试包 |
 
 ## 技术方案
 
@@ -119,6 +120,15 @@ Node、npm 和 Yarn 下载均已配置国内镜像，不要求修改用户全局
 ```
 
 全部构建、测试、诊断和安装命令见 [BUILD_GUILD.md](BUILD_GUILD.md)。
+
+### GitHub Actions 测试包
+
+进入仓库的 `Actions` 页面，选择 `Build test packages` 并点击 `Run workflow`，GitHub 会分别生成 Android
+Debug APK、Windows x64 MSI、macOS Apple Silicon DMG 和 macOS Intel DMG。构建完成后可在对应运行页面的
+`Artifacts` 区域下载，文件保留 14 天；推送 `v*` 标签也会自动触发。
+
+这些是未签名测试包，不会自动发布到 GitHub Releases。Windows 可能显示 SmartScreen 警告，macOS 可能要求
+在“隐私与安全性”中选择“仍要打开”。详细说明见 [构建手册](BUILD_GUILD.md#github-actions-测试安装包)。
 
 ## 安全与隐私边界
 

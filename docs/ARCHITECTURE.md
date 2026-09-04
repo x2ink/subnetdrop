@@ -31,6 +31,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 
 - [任务与审查记录](tasks/todo.md)
 - [当前平台与桌面验证](tasks/verification/2026-09-04-current-platform-status.md)
+- [GitHub Actions 测试安装包验证](tasks/verification/2026-09-04-github-actions-test-packages.md)
 
 ## 系统上下文
 
