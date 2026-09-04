@@ -20,12 +20,13 @@ flowchart LR
 ## WebSocket 生命周期
 
 - 聊天、配对和短控制请求使用短生命周期的 request/response WebSocket 会话。
-- 一个已接受的文件使用一个上传 WebSocket，所有 24 KiB 分块在该连接内顺序发送。
+- 设备发现和在线心跳复用短生命周期 `PING/PONG`；1.5 秒探测超时，连续 3 次失败才判定离线。
+- 一个已接受的文件使用一个上传 WebSocket，所有 512 KiB 二进制分块在该连接内顺序发送。
 - 每个请求都有超时和帧大小限制；收到协议错误会显式失败，不把异常吞成默认成功。
 - 应用停止时关闭 listener、取消会话并把已发现 peer 标记为离线。
 
-WebSocket 本身使用局域网明文 TCP；内容安全由应用层 HPKE 与 Ed25519 提供。这意味着同网观察者仍可能看到
-IP、端口、连接时间、帧类型和流量大小，部分签名控制元数据也可见。项目不声称隐藏通信关系或流量特征。
+WebSocket 本身使用局域网明文 TCP。聊天正文由应用层 HPKE 加密，文件内容则为追求吞吐的明文
+二进制流；同网观察者可能读取文件。Ed25519 认证文件会话和最终摘要，但不提供文件机密性。
 
 ## 协议外层
 
@@ -46,7 +47,7 @@ data class TransportFrame(
 |---|---|
 | 配对 | `PAIR_REQUEST`, `PAIR_RESPONSE` |
 | 聊天 | `CHAT_MESSAGE`, `DELIVERY_ACK`, `READ_RECEIPT` |
-| 文件 | `FILE_OFFER`, `FILE_DECISION`, `FILE_CHUNK`, `FILE_CANCEL` |
+| 文件 | `FILE_OFFER`, `FILE_DECISION`, `FILE_STREAM_START`, `FILE_STREAM_COMPLETE`, `FILE_CANCEL` |
 | 连接控制 | `ERROR`, `PING`, `PONG` |
 
 接收端先检查版本、帧大小、标识符、收件人和允许的状态转换，再解析类型负载。业务数据不能仅因为来源 IP 与已知

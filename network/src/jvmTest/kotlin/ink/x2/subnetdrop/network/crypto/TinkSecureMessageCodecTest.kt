@@ -3,11 +3,16 @@ package ink.x2.subnetdrop.network.crypto
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class TinkSecureMessageCodecTest {
     @Test
@@ -82,6 +87,25 @@ class TinkSecureMessageCodecTest {
         }
     }
 
+    @Test
+    fun concurrentIdentityRequestsReuseOneGeneratedKeyPair() {
+        runBlocking {
+            val store = InMemorySecureStore()
+            val codec = TinkSecureMessageCodec(store)
+
+            val identities = coroutineScope {
+                List(8) {
+                    async { codec.createPublicIdentity("device-id", "Device") }
+                }.awaitAll()
+            }
+
+            val expected = identities.first()
+            assertTrue(identities.all { it.encryptionPublicKey.contentEquals(expected.encryptionPublicKey) })
+            assertTrue(identities.all { it.signingPublicKey.contentEquals(expected.signingPublicKey) })
+            assertEquals(2, store.writeCount.get())
+        }
+    }
+
     private fun outgoingMessage(): Message = Message(
         id = "message-1",
         conversationId = "alice-device:bob-device",
@@ -95,11 +119,18 @@ class TinkSecureMessageCodecTest {
 
     private class InMemorySecureStore : SecureKeyValueStore {
         private val values = mutableMapOf<String, ByteArray>()
+        private val lock = Any()
+        val writeCount = AtomicInteger()
 
-        override suspend fun read(key: String): ByteArray? = values[key]?.copyOf()
+        override suspend fun read(key: String): ByteArray? = synchronized(lock) {
+            values[key]?.copyOf()
+        }
 
         override suspend fun write(key: String, value: ByteArray) {
-            values[key] = value.copyOf()
+            synchronized(lock) {
+                values[key] = value.copyOf()
+                writeCount.incrementAndGet()
+            }
         }
     }
 }

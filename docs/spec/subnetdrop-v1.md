@@ -7,7 +7,7 @@
 3. Support one-to-one text conversations with live delivery status.
 4. Store conversation history locally on each device.
 5. Encrypt message content for the intended peer and authenticate the sender.
-6. Transfer one file at a time after explicit receiver acceptance, with encrypted chunks and whole-file verification.
+6. Transfer one file at a time after explicit receiver acceptance, using a high-speed binary stream and whole-file verification.
 7. Use Clean Architecture and Koin constructor injection.
 
 ## Non-goals
@@ -20,11 +20,20 @@
 
 ### Identity setup
 
-On first launch the app creates a stable random device ID, a display name, an HPKE key pair, and a signing key pair. Private material never appears in discovery metadata.
+On first launch the app creates a stable random device ID and display name, then starts discovery without waiting for
+cryptographic key generation. The HPKE and Ed25519 key pairs are created lazily when secure pairing or messaging first
+needs them. Private material never appears in discovery metadata.
 
 ### Discovery
 
-Each foreground device advertises `_subnetdrop._tcp.local.` with its device ID, protocol major version, display name, and listener port. Discovery results expire when mDNS removes the service or a freshness timeout is reached. IP addresses are never treated as stable identity.
+Each foreground device listens on UDP `224.0.0.167:45893` and sends a bounded JSON announcement after 100 ms, 500 ms,
+and 2 seconds. The announcement contains only the protocol version, device ID, display name, TCP listener port, and whether
+a reply is requested. A receiver replies once by UDP unicast and probes the announced `/chat` endpoint with `PING/PONG`.
+The peer becomes `ONLINE` only after that WebSocket probe succeeds; an announcement alone is never proof of reachability.
+
+Previously stored endpoints are probed concurrently at startup instead of waiting for multicast. Confirmed peers are probed
+every 5 seconds and become `OFFLINE` after three consecutive failures. Discovery and probing run outside the UI thread and
+must not prepare HPKE or Ed25519 identity. IP addresses are never treated as stable identity.
 
 ### Pairing
 
@@ -40,9 +49,10 @@ messages from `DELIVERED` to `READ`. Conversation summaries expose an unread cou
 
 ### File transfer
 
-The sender validates and hashes one selected file, then sends encrypted metadata. The receiver must explicitly accept
-before any content is uploaded. Accepted content uses ordered, independently encrypted 24 KiB chunks over one WebSocket.
-The receiver publishes the file only after byte-count and SHA-256 verification. Detailed limits are defined in
+The sender validates one selected file and sends signed metadata. The receiver must explicitly accept before any content
+is uploaded. Accepted content uses ordered plaintext 512 KiB binary frames over one WebSocket. Both sides calculate
+SHA-256 while streaming; the sender signs the final digest, and the receiver publishes the file only after byte-count and
+digest verification. Detailed limits are defined in
 [file-transfer-v1.md](file-transfer-v1.md).
 
 ## Domain model
@@ -93,15 +103,16 @@ Initial frame types:
 - `READ_RECEIPT`
 - `FILE_OFFER`
 - `FILE_DECISION`
-- `FILE_CHUNK`
+- `FILE_STREAM_START`
+- `FILE_STREAM_COMPLETE`
 - `FILE_CANCEL`
 - `ERROR`
 - `PING` / `PONG`
 
 Message IDs make receipt idempotent. The database has a unique constraint on message ID. An ACK is safe to send repeatedly.
 Pairing identities, routing fields, acknowledgement payloads and read-receipt message IDs are not encrypted. Chat content
-and file business payloads are HPKE encrypted; protected frames are signed or return a signed acknowledgement as defined
-by their type.
+is HPKE encrypted. File control payloads are Ed25519-signed, while accepted file bytes use an unencrypted binary stream;
+the final signed SHA-256 digest detects modification but does not provide file confidentiality.
 
 ## Encryption
 
@@ -132,7 +143,7 @@ Long-lived database, repository, discovery, identity, and connection-manager ins
 
 ## Acceptance criteria
 
-1. Two supported devices on a reachable LAN discover each other within 10 seconds.
+1. Two supported devices on a reachable LAN normally confirm each other within 3 seconds and always within 10 seconds.
 2. An unpaired device cannot deliver a chat message.
 3. Both devices show the same safety code during pairing.
 4. Tampered ciphertext, signature, sender, or recipient fields are rejected and not stored.

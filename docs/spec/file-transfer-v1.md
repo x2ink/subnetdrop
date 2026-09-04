@@ -1,10 +1,10 @@
-# Encrypted file transfer v1
+# High-speed file transfer v1
 
 ## Goal
 
 Add one-to-one file transfer between trusted SubnetDrop peers without a central server. The feature is inspired by
 [LocalSend's metadata-first upload session](https://github.com/localsend/protocol), while retaining SubnetDrop's existing
-device identity and HPKE trust model.
+device identity and trust model.
 
 ## Product behavior
 
@@ -40,33 +40,34 @@ request/response sessions. After acceptance, all chunks for one file reuse a sin
 sequenceDiagram
     participant S as Sender
     participant R as Receiver
-    S->>S: Stream file through SHA-256
-    S->>R: HPKE FILE_OFFER metadata
+    S->>R: Signed FILE_OFFER metadata
     R-->>S: Signed delivery ACK
     R->>R: User accepts or rejects
-    R->>S: HPKE FILE_DECISION
+    R->>S: Signed FILE_DECISION
     S-->>R: Signed delivery ACK
     S->>R: Open upload WebSocket
-    loop Sequential 24 KiB chunks on the same connection
-        S->>R: HPKE FILE_CHUNK
-        R->>R: Validate session, order and byte count
-        R-->>S: Signed chunk ACK
+    S->>R: Signed FILE_STREAM_START
+    loop Sequential 512 KiB chunks on the same connection
+        S->>R: Plain binary frame
+        S->>S: Update SHA-256
+        R->>R: Validate byte count and update SHA-256
     end
-    S->>R: Close upload WebSocket
+    S->>R: Signed FILE_STREAM_COMPLETE with SHA-256
     R->>R: Verify total bytes and SHA-256, then rename temporary file
+    R-->>S: Signed delivery ACK
 ```
 
-Control payloads and chunks are encrypted and authenticated with HPKE plus Ed25519 using frame metadata as associated
-data. The SHA-256 digest protects whole-file integrity and allows validation before the temporary file becomes visible.
-The encrypted chunk is currently Base64 encoded inside a JSON text frame. This remains within the 64 KiB frame limit but
-adds encoding overhead; a future binary channel must preserve the same authenticated metadata and validation rules.
+File control payloads are authenticated with Ed25519. File bytes are intentionally not encrypted: they are sent as raw
+binary WebSocket frames without Base64 conversion or per-chunk acknowledgement. Both devices calculate SHA-256 while
+streaming, and the signed completion frame binds the sender's final digest to the authenticated transfer. This detects
+modification but does not hide the file from an observer on the same network.
 
 ## Limits and validation
 
 - Trusted peers only.
 - One file per transfer session in v1.
 - Maximum file size: 10 GiB.
-- Chunk plaintext size: 24 KiB.
+- Binary chunk size: 512 KiB.
 - Maximum file name length: 255 characters.
 - File names are reduced to a leaf name; path separators, blank names and control characters are rejected.
 - Chunks must arrive exactly once and in ascending order.

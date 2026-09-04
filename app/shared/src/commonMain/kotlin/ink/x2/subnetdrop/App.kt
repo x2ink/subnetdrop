@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -113,6 +114,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
 @Composable
 private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
     val backStack = remember { mutableStateListOf<Any>(HomeRoute) }
+    val latestUi = rememberUpdatedState(ui)
     LaunchedEffect(ui.selection) {
         syncCompactBackStack(backStack, ui.selection?.let(::ChatRoute))
     }
@@ -124,7 +126,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
             when (route) {
                 HomeRoute -> NavEntry(route) {
                     HomeScreen(
-                        state = ui,
+                        state = latestUi.value,
                         modifier = Modifier.fillMaxSize(),
                         onSectionSelected = viewModel::selectSection,
                         onPeerSelected = viewModel::openPeer,
@@ -136,13 +138,13 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                 is ChatRoute -> NavEntry(route) {
                     ChatScreen(
                         selection = route.selection,
-                        messages = ui.messages,
+                        messages = latestUi.value.messages,
                         modifier = Modifier.fillMaxSize(),
                         showBack = true,
                         onBack = { navigateHome(backStack, viewModel) },
                         onSend = viewModel::send,
                         onRetryMessage = viewModel::retry,
-                        transfers = ui.fileTransfers,
+                        transfers = latestUi.value.fileTransfers,
                         onSendFile = viewModel::sendFile,
                         onCancelFile = viewModel::cancelFile,
                         onFilePickerError = viewModel::reportFilePickerError,
@@ -174,7 +176,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val candidates by viewModel.candidates.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
-    val identity by viewModel.localIdentity.collectAsStateWithLifecycle()
+    val profile by viewModel.localProfile.collectAsStateWithLifecycle()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
@@ -186,8 +188,8 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
         conversations = conversations,
         candidates = candidates,
         runtimeState = runtimeState,
-        localDeviceId = identity?.deviceId,
-        localDisplayName = identity?.displayName,
+        localDeviceId = profile?.deviceId,
+        localDisplayName = profile?.displayName,
         selection = selection,
         messages = messages,
         notice = notice,

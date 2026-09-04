@@ -23,7 +23,6 @@ logback = "1.6.3"
 material3 = "1.11.0-alpha07"
 sqldelight = "2.3.2"
 tink = "1.23.0"
-jmdns = "3.6.3"
 java-keyring = "1.0.4"
 filekit = "0.15.0"
 navigation3 = "1.1.1"
@@ -73,7 +72,6 @@ ktor-serverTestHost = { module = "io.ktor:ktor-server-test-host-jvm", version.re
 wrappers-browser = { module = "org.jetbrains.kotlin-wrappers:kotlin-browser", version.ref = "kotlin-wrappers" }
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
 tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink" }
-jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
 java-keyring = { module = "com.github.javakeyring:java-keyring", version.ref = "java-keyring" }
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekit" }
 filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekit" }

@@ -21,7 +21,8 @@ enum class FrameType {
     READ_RECEIPT,
     FILE_OFFER,
     FILE_DECISION,
-    FILE_CHUNK,
+    FILE_STREAM_START,
+    FILE_STREAM_COMPLETE,
     FILE_CANCEL,
     ERROR,
     PING,
@@ -52,7 +53,6 @@ data class FileOfferPayload(
     val fileName: String,
     val size: Long,
     val contentType: String?,
-    val sha256: String,
 )
 
 @Serializable
@@ -62,11 +62,14 @@ data class FileDecisionPayload(
 )
 
 @Serializable
-data class FileChunkPayload(
+data class FileStreamStartPayload(
     val transferId: String,
-    val index: Long,
-    val data: String,
-    val isLast: Boolean,
+)
+
+@Serializable
+data class FileStreamCompletePayload(
+    val transferId: String,
+    val sha256: String,
 )
 
 @Serializable

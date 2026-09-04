@@ -48,7 +48,6 @@ kotlin {
                 implementation(libs.ktor.serverCore)
                 implementation(libs.ktor.serverCio)
                 implementation(libs.ktor.serverWebsockets)
-                implementation(libs.jmdns)
                 implementation(libs.java.keyring)
                 implementation(libs.tink)
             }

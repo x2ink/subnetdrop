@@ -25,8 +25,9 @@ flowchart TB
 |---|---|
 | `commonMain` | 领域模型、端口、用例、SQLDelight 仓库、协议模型、Compose UI、ViewModel |
 | `jvmAndAndroidMain` | Ktor CIO 传输和 Google Tink JVM/Android 密码实现 |
-| `androidMain` | NSD、Keystore、Android SQLDelight driver、Android Koin module |
-| `jvmMain` | JmDNS、java-keyring、SQLite JDBC、桌面 Koin module |
+| `jvmAndAndroidMain` | UDP 组播、Ktor CIO 传输和 Google Tink JVM/Android 密码实现 |
+| `androidMain` | Wi-Fi multicast lock、Keystore、Android SQLDelight driver、Android Koin module |
+| `jvmMain` | java-keyring、SQLite JDBC、桌面 Koin module |
 | `androidApp` | `Application`、Activity、权限与生命周期 |
 | `desktopApp` | Compose window、进程启动和 DMG/MSI/DEB 分发 |
 
@@ -59,7 +60,7 @@ flowchart LR
 
 | 能力 | common 契约 | Android | macOS / Windows |
 |---|---|---|---|
-| 发现 | `PeerDiscovery` | `NsdManager` | JmDNS |
+| 发现 | `PeerDiscovery` | 共享 UDP 组播 + multicast lock | 共享 UDP 组播 |
 | 数据库 | repository ports | Android driver | SQLite JDBC |
 | 私钥 | `SecureKeyValueStore` | Android Keystore | java-keyring |
 | 文件选择 | `rememberPlatformFilePicker` | FileKit provider | FileKit native dialog |

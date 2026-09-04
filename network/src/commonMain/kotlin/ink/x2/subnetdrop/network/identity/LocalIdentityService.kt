@@ -1,5 +1,6 @@
 package ink.x2.subnetdrop.network.identity
 
+import ink.x2.subnetdrop.domain.model.DeviceProfile
 import ink.x2.subnetdrop.domain.model.PublicIdentity
 import ink.x2.subnetdrop.domain.port.DeviceProfileRepository
 import ink.x2.subnetdrop.domain.port.IdGenerator
@@ -14,32 +15,38 @@ class LocalIdentityService(
     private val defaultDisplayName: String,
 ) {
     private val mutex = Mutex()
+    private var cachedProfile: DeviceProfile? = null
     private var cachedIdentity: PublicIdentity? = null
 
-    suspend fun get(): PublicIdentity = cachedIdentity ?: mutex.withLock {
-        cachedIdentity ?: createIdentity().also { cachedIdentity = it }
+    suspend fun getProfile(): DeviceProfile = cachedProfile ?: mutex.withLock {
+        cachedProfile ?: createProfile().also { cachedProfile = it }
     }
 
-    suspend fun updateDisplayName(displayName: String): PublicIdentity = mutex.withLock {
+    suspend fun get(): PublicIdentity = cachedIdentity ?: mutex.withLock {
+        cachedIdentity ?: createIdentity(currentProfile()).also { cachedIdentity = it }
+    }
+
+    suspend fun updateDisplayName(displayName: String): DeviceProfile = mutex.withLock {
         val normalizedName = displayName.trim()
         require(normalizedName.isNotEmpty()) { "Display name cannot be blank" }
-        val current = cachedIdentity ?: createIdentity()
+        val updated = currentProfile().copy(displayName = normalizedName)
         deviceProfileRepository.updateDisplayName(normalizedName)
-        secureMessageCodec.createPublicIdentity(
-            deviceId = current.deviceId,
-            displayName = normalizedName,
-        ).also { cachedIdentity = it }
+        cachedProfile = updated
+        cachedIdentity = cachedIdentity?.let {
+            secureMessageCodec.createPublicIdentity(updated.deviceId, updated.displayName)
+        }
+        updated
     }
 
-    private suspend fun createIdentity(): PublicIdentity = deviceProfileRepository
-        .getOrCreate(
-            defaultDeviceId = idGenerator.generate(),
-            defaultDisplayName = defaultDisplayName,
-        )
-        .let { profile ->
-            secureMessageCodec.createPublicIdentity(
-                deviceId = profile.deviceId,
-                displayName = profile.displayName,
-            )
-        }
+    private suspend fun currentProfile(): DeviceProfile = cachedProfile ?: createProfile().also { cachedProfile = it }
+
+    private suspend fun createProfile(): DeviceProfile = deviceProfileRepository.getOrCreate(
+        defaultDeviceId = idGenerator.generate(),
+        defaultDisplayName = defaultDisplayName,
+    )
+
+    private suspend fun createIdentity(profile: DeviceProfile): PublicIdentity = secureMessageCodec.createPublicIdentity(
+        deviceId = profile.deviceId,
+        displayName = profile.displayName,
+    )
 }

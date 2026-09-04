@@ -6,7 +6,7 @@
 ## 产品边界
 
 SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工具。设备在同一可达网络内自动发现、
-显式配对，并直接交换经过认证和加密的一对一消息与文件；身份、信任与聊天历史由各设备独立保存。
+显式配对，并直接交换经过认证的加密一对一消息与高速文件；身份、信任与聊天历史由各设备独立保存。
 
 不在当前范围内：群聊、互联网中继、NAT 穿透、账号系统、云同步、跨设备历史同步、语音视频通话和推送服务。
 
@@ -19,18 +19,20 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [点对点传输](technical-principles/p2p-transport.md)
 - [配对与端到端加密](technical-principles/end-to-end-encryption.md)
 - [可靠消息与本地存储](technical-principles/reliable-messaging-and-storage.md)
-- [加密文件传输](technical-principles/file-transfer.md)
+- [高速文件传输](technical-principles/file-transfer.md)
 - [KMP 跨平台架构](technical-principles/cross-platform-architecture.md)
 
 ### 规格：系统必须满足什么
 
 - [产品与通信协议 v1](spec/subnetdrop-v1.md)
-- [加密文件传输 v1](spec/file-transfer-v1.md)
+- [高速文件传输 v1](spec/file-transfer-v1.md)
 
 ### 执行与验证：当前做到什么程度
 
 - [任务与审查记录](tasks/todo.md)
 - [当前平台与桌面验证](tasks/verification/2026-09-04-current-platform-status.md)
+- [Android Navigation3 状态刷新验证](tasks/verification/2026-09-05-android-nav-state.md)
+- [UDP 设备发现与在线状态验证](tasks/verification/2026-09-05-udp-discovery.md)
 - [GitHub Actions 测试安装包验证](tasks/verification/2026-09-04-github-actions-test-packages.md)
 
 ## 系统上下文
@@ -39,7 +41,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 flowchart TB
     UserA[User on device A] --> ClientA[SubnetDrop client A]
     UserB[User on device B] --> ClientB[SubnetDrop client B]
-    ClientA <-->|mDNS discovery| ClientB
+    ClientA <-->|UDP announce + WebSocket probe| ClientB
     ClientA <-->|Ktor WebSocket over LAN| ClientB
     ClientA --> DbA[(Local SQLite A)]
     ClientB --> DbB[(Local SQLite B)]
@@ -85,7 +87,9 @@ flowchart LR
 sequenceDiagram
     participant A as Device A
     participant B as Device B
-    A-->>B: mDNS service discovery
+    A-->>B: UDP multicast announcement
+    B->>A: WebSocket PING
+    A-->>B: PONG, peer confirmed online
     A->>B: WebSocket PAIR_REQUEST with public identity
     B-->>A: PAIR_RESPONSE with public identity
     A->>A: Calculate and confirm safety code
@@ -94,13 +98,15 @@ sequenceDiagram
     B->>B: Verify, decrypt, deduplicate, persist
     B-->>A: Signed DELIVERY_ACK
     B-->>A: Signed READ_RECEIPT after opening chat
-    A->>B: Encrypted FILE_OFFER
-    B-->>A: Encrypted FILE_DECISION
+    A->>B: Signed FILE_OFFER
+    B-->>A: Signed FILE_DECISION
     A->>B: One accepted upload WebSocket
-    loop Ordered 24 KiB chunks
-        A->>B: Encrypted FILE_CHUNK
-        B-->>A: Signed DELIVERY_ACK
+    A->>B: Signed FILE_STREAM_START
+    loop Ordered 512 KiB chunks
+        A->>B: Plain binary frame
     end
+    A->>B: Signed FILE_STREAM_COMPLETE with SHA-256
+    B-->>A: Signed DELIVERY_ACK
     B->>B: Verify length and SHA-256, publish file
 ```
 
@@ -126,7 +132,8 @@ interface TrustedIdentityRepository
 
 - SQLite 是设备资料、受信身份、会话和消息的本地事实来源。
 - HPKE 与 Ed25519 私钥只进入 Android Keystore 包装存储或桌面系统凭据存储。
-- mDNS 元数据是公开且不可信的，只用于定位候选设备；不得在发现广播中发布私钥或信任结论。
+- UDP 发现元数据是公开且不可信的，只用于定位候选设备；必须经 WebSocket PING 确认可达，且不得在发现广播中
+  发布私钥或信任结论。
 - 远端地址是临时路由信息，不是身份。信任绑定 `deviceId`、加密公钥和签名公钥。
 - 聊天正文目前在 SQLite 中明文保存；传输安全与静态存储安全必须分别描述。
 - 文件接收先写临时文件，只有完整性验证成功才能原子发布。
@@ -135,7 +142,7 @@ interface TrustedIdentityRepository
 
 | 能力 | Android | macOS / Windows Desktop |
 |---|---|---|
-| 服务发现 | `NsdManager` + Wi-Fi multicast lock | JmDNS |
+| 服务发现 | 共享 UDP 组播 + Wi-Fi multicast lock | 共享 UDP 组播 |
 | 私钥保护 | Android Keystore 包装本地 keyset | java-keyring 对接 Keychain / Credential Manager |
 | 数据库驱动 | SQLDelight Android driver | SQLDelight SQLite JDBC driver |
 | 文件选择 | FileKit Android provider | FileKit 原生桌面对话框 |

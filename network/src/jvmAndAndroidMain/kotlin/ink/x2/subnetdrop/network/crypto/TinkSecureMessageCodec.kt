@@ -1,5 +1,6 @@
 package ink.x2.subnetdrop.network.crypto
 
+import com.google.crypto.tink.Configuration
 import com.google.crypto.tink.HybridDecrypt
 import com.google.crypto.tink.HybridEncrypt
 import com.google.crypto.tink.InsecureSecretKeyAccess
@@ -20,6 +21,9 @@ import ink.x2.subnetdrop.network.protocol.EncryptedMessageBody
 import ink.x2.subnetdrop.network.protocol.SecureEnvelope
 import ink.x2.subnetdrop.network.protocol.SecurePayloadEnvelope
 import ink.x2.subnetdrop.network.protocol.SignedEnvelopeHeader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
@@ -32,7 +36,10 @@ class TinkSecureMessageCodec(
 ) : SecureMessageCodec {
     private val initializationMutex = Mutex()
     private var keyMaterial: KeyMaterial? = null
-    private val tinkConfiguration = RegistryConfiguration.get()
+    private val tinkConfiguration by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        TinkConfig.register()
+        RegistryConfiguration.get()
+    }
     private val json = Json {
         encodeDefaults = true
         ignoreUnknownKeys = false
@@ -201,25 +208,39 @@ class TinkSecureMessageCodec(
     }
 
     private suspend fun loadKeyMaterial(): KeyMaterial = keyMaterial ?: initializationMutex.withLock {
-        keyMaterial ?: KeyMaterial(
-            encryptionPrivate = loadOrCreateKeyset(ENCRYPTION_KEY) {
-                KeysetHandle.generateNew(
-                    HpkeParameters.builder()
-                        .setKemId(HpkeParameters.KemId.DHKEM_X25519_HKDF_SHA256)
-                        .setKdfId(HpkeParameters.KdfId.HKDF_SHA256)
-                        .setAeadId(HpkeParameters.AeadId.AES_256_GCM)
-                        .setVariant(HpkeParameters.Variant.TINK)
-                        .build(),
-                )
-            },
-            signingPrivate = loadOrCreateKeyset(SIGNING_KEY) {
-                KeysetHandle.generateNew(PredefinedSignatureParameters.ED25519)
-            },
-        ).also { keyMaterial = it }
+        keyMaterial ?: createKeyMaterial().also { keyMaterial = it }
+    }
+
+    private suspend fun createKeyMaterial(): KeyMaterial {
+        val configuration = tinkConfiguration
+        return coroutineScope {
+            val encryptionPrivate = async(Dispatchers.Default) {
+                loadOrCreateKeyset(ENCRYPTION_KEY, configuration) {
+                    KeysetHandle.generateNew(
+                        HpkeParameters.builder()
+                            .setKemId(HpkeParameters.KemId.DHKEM_X25519_HKDF_SHA256)
+                            .setKdfId(HpkeParameters.KdfId.HKDF_SHA256)
+                            .setAeadId(HpkeParameters.AeadId.AES_256_GCM)
+                            .setVariant(HpkeParameters.Variant.TINK)
+                            .build(),
+                    )
+                }
+            }
+            val signingPrivate = async(Dispatchers.Default) {
+                loadOrCreateKeyset(SIGNING_KEY, configuration) {
+                    KeysetHandle.generateNew(PredefinedSignatureParameters.ED25519)
+                }
+            }
+            KeyMaterial(
+                encryptionPrivate = encryptionPrivate.await(),
+                signingPrivate = signingPrivate.await(),
+            )
+        }
     }
 
     private suspend fun loadOrCreateKeyset(
         key: String,
+        configuration: Configuration,
         generator: () -> KeysetHandle,
     ): KeysetHandle {
         val stored = secureStore.read(key)
@@ -227,7 +248,7 @@ class TinkSecureMessageCodec(
             return TinkProtoKeysetFormat.parseKeyset(
                 stored,
                 InsecureSecretKeyAccess.get(),
-                tinkConfiguration,
+                configuration,
             )
         }
 
@@ -235,7 +256,7 @@ class TinkSecureMessageCodec(
         val serialized = TinkProtoKeysetFormat.serializeKeyset(
             generated,
             InsecureSecretKeyAccess.get(),
-            tinkConfiguration,
+            configuration,
         )
         secureStore.write(key, serialized)
         return generated
@@ -301,9 +322,5 @@ class TinkSecureMessageCodec(
         const val ENCRYPTION_KEY = "identity.hpke.private"
         const val SIGNING_KEY = "identity.ed25519.private"
         val IDENTIFIER_REGEX = Regex("^[A-Za-z0-9._:-]{1,128}$")
-
-        init {
-            TinkConfig.register()
-        }
     }
 }

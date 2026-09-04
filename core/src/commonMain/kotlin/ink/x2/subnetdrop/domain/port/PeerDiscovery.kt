@@ -6,7 +6,12 @@ import kotlinx.coroutines.flow.Flow
 interface PeerDiscovery {
     val events: Flow<DiscoveryEvent>
 
-    suspend fun start(localDeviceId: String, displayName: String, servicePort: Int)
+    suspend fun start(
+        localDeviceId: String,
+        displayName: String,
+        servicePort: Int,
+        knownPeers: List<Peer>,
+    )
 
     suspend fun stop()
 }

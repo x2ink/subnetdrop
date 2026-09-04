@@ -1,9 +1,10 @@
 # SubnetDrop
 
-> Serverless, encrypted file transfer and one-to-one chat for devices on the same LAN.
+> Serverless, high-speed file transfer and encrypted one-to-one chat for devices on the same LAN.
 
 SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用。设备连接到同一个可互访的 Wi-Fi
-后，通过 mDNS 自动发现彼此，核对安全码完成配对，并直接传输加密消息和文件。通信不依赖互联网、云存储、
+后，通过 UDP 组播和 WebSocket 可达性探测自动发现彼此，核对安全码完成配对，并直接传输加密消息和高速文件。
+通信不依赖互联网、云存储、
 账号系统或中心服务器，聊天记录只保存在参与通信的本地设备中。
 
 ![SubnetDrop macOS 桌面端](docs/assets/screenshots/subnetdrop-macos-readme.png)
@@ -12,21 +13,21 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 
 ## 产品亮点
 
-- **同网即用**：Android 使用系统 NSD，桌面端使用 JmDNS，通过 `_subnetdrop._tcp.local.` 自动发现设备。
+- **同网即用**：设备主动发送 UDP 组播公告，再用 WebSocket `PING/PONG` 确认对端真实可达。
 - **无中心服务器**：每台设备既能监听也能主动连接，消息和文件直接在两端之间传输。
 - **显式建立信任**：双方核对相同的六位安全码后才保存公钥；已配对设备密钥变化会进入阻断状态。
-- **端到端加密**：Google Tink HPKE 负责内容机密性，Ed25519 负责发送者身份和数据完整性认证。
+- **加密文字聊天**：Google Tink HPKE 保护聊天正文，Ed25519 认证发送者和文件控制帧。
 - **可靠一对一聊天**：支持本地历史、幂等去重、失败重试、签名送达 ACK、未读计数和签名已读回执。
-- **确认后传文件**：接收方接受后才发送文件数据；分块加密、按序校验，最终以长度和 SHA-256 验证结果。
+- **确认后高速传文件**：使用 512 KiB 原始二进制分块，无 HPKE、无 Base64、无逐块 ACK，最终以长度和 SHA-256 验证。
 - **共享跨平台 UI**：Compose Multiplatform Material 3 统一实现，自适应紧凑导航和桌面双栏布局。
 
 ## 平台适配状态
 
 | 平台 | 目标版本 | 当前状态 | 仍需完成 |
 |---|---:|---|---|
-| Android | Android 11 / API 30+ | 核心功能已实现；Android 与 macOS 的发现、配对、双向加密聊天和持久化已有真机验证记录 | FileKit 替换后的文件选择与当前品牌版本需要再次真机回归；发布包需补完整权限与后台策略验证 |
-| macOS | 当前受支持版本 | JVM 回归、桌面编译、DMG 打包和当前应用启动通过；本页截图来自当前构建 | 正式签名、公证和发布身份下的 Keychain 隔离验证 |
-| Windows | Windows 10+ | 共用 Desktop JVM 实现，并已配置 Windows GitHub Actions Runner 构建 MSI | 首次远程 MSI 构建尚待运行；之后仍需验证防火墙引导、凭据存储、设备发现和三端互通 |
+| Android | Android 11 / API 30+ | 核心功能已实现；共享 UDP 发现、可达探测和应用已通过 Android 编译 | 新发现协议需要再次进行 Android/macOS 真机互通；FileKit 与后台策略仍待验证 |
+| macOS | 当前受支持版本 | JVM 回归、桌面编译、DMG 打包和当前应用启动通过；本页截图来自当前构建 | 新 UDP 发现需要双机验证；正式签名、公证和发布身份下的 Keychain 隔离仍待验证 |
+| Windows | Windows 10+ | 共用 Desktop JVM 实现，并已配置 Windows GitHub Actions Runner 构建 MSI | 首次远程 MSI 构建，以及防火墙、凭据存储、UDP 发现和三端互通仍待验证 |
 
 原生安装包必须在目标操作系统构建。当前最完整的开发验证环境是 macOS；上表不会把“代码可编译”描述成
 “平台已完整验收”。
@@ -46,7 +47,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 | 序列化与异步 | kotlinx.serialization / Coroutines | 1.11.0 | 严格 JSON 协议和结构化并发 |
 | 本地数据库 | SQLDelight | 2.3.2 | 类型安全 SQLite、会话、信任和消息状态 |
 | 密码学 | Google Tink | 1.23.0 | HPKE 与 Ed25519，不自行实现密码算法 |
-| 局域网发现 | Android NSD / JmDNS | 系统 API / 3.6.3 | mDNS-DNS-SD 服务发布、发现和解析 |
+| 局域网发现 | UDP multicast + Ktor probe | JDK / Ktor | 主动公告、单播响应、可达确认和心跳超时 |
 | 文件选择 | FileKit | 0.15.0 | Compose Multiplatform 原生文件选择 |
 | 桌面凭据 | java-keyring | 1.0.4 | 对接 macOS Keychain / Windows Credential Manager |
 | 构建 | Gradle / Android Gradle Plugin | 9.1.0 / 9.0.1 | 多模块构建、Android 与桌面分发 |
@@ -72,12 +73,13 @@ flowchart LR
 |---|---|
 | `:core` | 领域模型、端口和用例，不依赖 UI、数据库、网络或 DI 框架 |
 | `:data` | SQLDelight schema，以及聊天、设备和信任仓库适配器 |
-| `:network` | mDNS 发现、稳定设备身份、配对、Tink 加密和 Ktor WebSocket 传输 |
+| `:network` | UDP 组播发现、稳定设备身份、配对、Tink 加密和 Ktor WebSocket 传输 |
 | `:app:shared` | Compose UI、Navigation 3、FileKit、ViewModel、Koin 公共组合和运行时编排 |
-| `:app:androidApp` | Android 入口、权限、Keystore、NSD 和进程生命周期 |
-| `:app:desktopApp` | macOS/Windows 入口、JmDNS、系统凭据存储、窗口和原生安装包 |
+| `:app:androidApp` | Android 入口、权限、Keystore、Wi-Fi multicast lock 和进程生命周期 |
+| `:app:desktopApp` | macOS/Windows 入口、系统凭据存储、窗口和原生安装包 |
 
-一次完整连接并不是把 IP 地址当作身份：mDNS 只提供当前可达地址，稳定 `deviceId` 与经人工确认的公钥才构成
+一次完整连接并不是把 IP 地址当作身份：UDP 公告只提供候选地址，WebSocket PONG 确认当前可达；稳定
+`deviceId` 与经人工确认的公钥才构成
 设备身份。聊天和文件共用协议版本 1 与 `/chat` WebSocket 端点，默认监听 TCP `45892`。
 
 详细原理：
@@ -86,7 +88,7 @@ flowchart LR
 - [点对点传输](docs/technical-principles/p2p-transport.md)
 - [配对与端到端加密](docs/technical-principles/end-to-end-encryption.md)
 - [可靠消息与本地存储](docs/technical-principles/reliable-messaging-and-storage.md)
-- [加密文件传输](docs/technical-principles/file-transfer.md)
+- [高速文件传输](docs/technical-principles/file-transfer.md)
 - [KMP 跨平台边界](docs/technical-principles/cross-platform-architecture.md)
 
 ## 使用方式
@@ -98,7 +100,7 @@ flowchart LR
 5. 对端接受后才开始传输。桌面文件保存到 `~/Downloads/SubnetDrop`，同名文件不会被覆盖。
 
 发现失败时，优先检查设备是否处于同一可达网段、VPN 是否接管局域网、路由器是否启用 AP 隔离，以及系统
-防火墙是否放行 TCP `45892` 和 mDNS。
+防火墙是否放行 TCP `45892` 和 UDP `45893`。
 
 ## 快速开始
 
@@ -132,12 +134,12 @@ Debug APK、Windows x64 MSI、macOS Apple Silicon DMG 和 macOS Intel DMG。构�
 
 ## 安全与隐私边界
 
-- 传输中的聊天正文、文件元数据和文件分块使用 HPKE 加密；消息、控制帧、ACK 和已读回执按协议要求签名。
+- 聊天正文使用 HPKE 端到端加密；文件内容为局域网明文二进制流，文件控制帧、ACK 和已读回执由 Ed25519 签名。
 - 私钥保存在 Android Keystore 或桌面系统凭据存储中，不写入 SQLite。
 - 接收文件先写临时文件，仅在顺序、总长度和 SHA-256 全部通过后发布到下载目录。
 - 当前 SQLite 中的聊天正文仍是本地明文；“传输端到端加密”不等于“数据库静态加密”。
 - 当前 HPKE 方案不声明前向保密；未来若引入 Noise / Double Ratchet，需要升级协议而不是静默替换。
-- 文件块当前封装为 Base64 JSON 文本帧，简单且可测试，但带来额外体积；二进制数据通道仍在路线图中。
+- 文件原始字节不提供机密性；同一局域网中能观察流量的主体可能读取文件内容。需要保密文件时应在发送前自行加密。
 - SubnetDrop 参考 LocalSend 的“先发元数据、接收方确认、再上传”思路，但不是 LocalSend 协议兼容实现。
 
 ## 当前限制与路线图
@@ -145,7 +147,6 @@ Debug APK、Windows x64 MSI、macOS Apple Silicon DMG 和 macOS Intel DMG。构�
 - 在 Windows 主机完成 MSI 构建和 Android/macOS/Windows 三端互通验证。
 - 完成 macOS 签名与公证，并验证发布身份下的 Keychain 隔离。
 - 加密本地消息正文，补充密钥轮换与数据库迁移设计。
-- 将文件数据从 Base64 JSON 帧升级为有边界的二进制通道。
 - 拆分当前传输实现中的聊天、配对和文件会话职责，不改变协议行为。
 - 对外发布前补充明确的开源许可证；当前仓库尚未包含 `LICENSE` 文件。
 

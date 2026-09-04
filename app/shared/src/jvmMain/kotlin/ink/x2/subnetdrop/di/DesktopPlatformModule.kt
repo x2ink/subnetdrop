@@ -7,6 +7,7 @@ import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.domain.port.IdGenerator
 import ink.x2.subnetdrop.domain.port.PairingService
 import ink.x2.subnetdrop.domain.port.PeerDiscovery
+import ink.x2.subnetdrop.domain.port.PeerReachabilityProbe
 import ink.x2.subnetdrop.domain.port.SecureMessageCodec
 import ink.x2.subnetdrop.domain.port.TimestampProvider
 import ink.x2.subnetdrop.network.crypto.DesktopSecureKeyValueStore
@@ -27,7 +28,7 @@ val desktopPlatformModule = module {
     single<SecureMessageCodec> { TinkSecureMessageCodec(get()) }
     single<TimestampProvider> { TimestampProvider(System::currentTimeMillis) }
     single<IdGenerator> { IdGenerator { UUID.randomUUID().toString() } }
-    single<PeerDiscovery> { DesktopPeerDiscovery(get()) }
+    single<PeerDiscovery> { DesktopPeerDiscovery(get(), get()) }
     single {
         SubnetDropTransport(
             localIdentityService = get(),
@@ -41,6 +42,7 @@ val desktopPlatformModule = module {
         )
     }
     single<ChatTransport> { get<SubnetDropTransport>() }
+    single<PeerReachabilityProbe> { get<SubnetDropTransport>() }
     single<FileTransferService> { get<SubnetDropTransport>() }
     single<PairingService> { get<SubnetDropTransport>() }
     single(named(DEFAULT_DISPLAY_NAME_QUALIFIER)) { defaultDesktopDeviceName() }

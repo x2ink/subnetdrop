@@ -32,9 +32,28 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class SubnetDropTransportTest {
+    @Test
+    fun probesReachabilityWithoutPreparingCryptographicIdentity() {
+        runBlocking {
+            val alice = TestNode("alice-probe", availablePort())
+            val bob = TestNode("bob-probe", availablePort())
+            bob.transport.start()
+            try {
+                assertTrue(alice.transport.isReachable(alice.peerFor(bob)))
+                assertTrue(alice.secureStoreIsEmpty())
+                assertTrue(bob.secureStoreIsEmpty())
+                assertFalse(alice.transport.isReachable(alice.peerFor(bob).copy(port = availablePort())))
+            } finally {
+                bob.transport.stop()
+            }
+        }
+    }
+
     @Test
     fun pairsAndDeliversEncryptedMessageWithDeduplication() {
         runBlocking {
@@ -74,7 +93,7 @@ class SubnetDropTransportTest {
     }
 
     @Test
-    fun offersAcceptsAndTransfersEncryptedFileInChunks() {
+    fun offersAcceptsAndTransfersFileThroughBinaryStream() {
         runBlocking {
             val alice = TestNode("alice-file", availablePort())
             val bob = TestNode("bob-file", availablePort())
@@ -84,7 +103,7 @@ class SubnetDropTransportTest {
             bob.transport.start()
             try {
                 alice.pairWith(bob)
-                val sourceBytes = ByteArray(70_000) { index -> (index % 251).toByte() }
+                val sourceBytes = ByteArray(1_300_000) { index -> (index % 251).toByte() }
                 val source = File(alice.workingDirectory, "transfer sample.bin").apply {
                     writeBytes(sourceBytes)
                 }
@@ -151,7 +170,8 @@ private class TestNode(
     val workingDirectory: File = Files.createTempDirectory("subnetdrop-$id-").toFile()
     private var transferSequence = 0
     private val profileRepository = TestDeviceProfileRepository(id)
-    private val codec = TinkSecureMessageCodec(MemorySecureKeyValueStore())
+    private val secureStore = MemorySecureKeyValueStore()
+    private val codec = TinkSecureMessageCodec(secureStore)
     private val identityService = LocalIdentityService(
         deviceProfileRepository = profileRepository,
         secureMessageCodec = codec,
@@ -174,18 +194,20 @@ private class TestNode(
     )
 
     suspend fun discover(other: TestNode) {
-        peers.upsertPeer(
-            Peer(
-                id = other.id,
-                displayName = other.id,
-                host = "127.0.0.1",
-                port = other.port,
-                availability = PeerAvailability.ONLINE,
-                trustState = TrustState.UNPAIRED,
-                lastSeenAt = 1L,
-            ),
-        )
+        peers.upsertPeer(peerFor(other).copy(availability = PeerAvailability.ONLINE))
     }
+
+    fun peerFor(other: TestNode) = Peer(
+        id = other.id,
+        displayName = other.id,
+        host = "127.0.0.1",
+        port = other.port,
+        availability = PeerAvailability.OFFLINE,
+        trustState = TrustState.UNPAIRED,
+        lastSeenAt = 1L,
+    )
+
+    fun secureStoreIsEmpty(): Boolean = secureStore.isEmpty()
 
     fun messageTo(other: TestNode, body: String) = Message(
         id = "message-1",
@@ -214,6 +236,8 @@ private class MemorySecureKeyValueStore : SecureKeyValueStore {
     override suspend fun write(key: String, value: ByteArray) {
         values[key] = value.copyOf()
     }
+
+    fun isEmpty(): Boolean = values.isEmpty()
 }
 
 private class TestDeviceProfileRepository(

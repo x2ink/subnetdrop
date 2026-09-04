@@ -1,8 +1,8 @@
 package ink.x2.subnetdrop.runtime
 
+import ink.x2.subnetdrop.domain.model.DeviceProfile
 import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.PeerAvailability
-import ink.x2.subnetdrop.domain.model.PublicIdentity
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.domain.port.ChatTransport
 import ink.x2.subnetdrop.domain.port.DiscoveryEvent
@@ -20,6 +20,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,17 +35,17 @@ class SubnetDropRuntime(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lifecycleMutex = Mutex()
     private val mutableState = MutableStateFlow<RuntimeState>(RuntimeState.Stopped)
-    private val mutableIdentity = MutableStateFlow<PublicIdentity?>(null)
+    private val mutableProfile = MutableStateFlow<DeviceProfile?>(null)
     private var discoveryJob: Job? = null
     private var transportJob: Job? = null
 
     val state: StateFlow<RuntimeState> = mutableState.asStateFlow()
-    val identity: StateFlow<PublicIdentity?> = mutableIdentity.asStateFlow()
+    val profile: StateFlow<DeviceProfile?> = mutableProfile.asStateFlow()
 
     suspend fun start() {
         lifecycleMutex.withLock {
             if (state.value is RuntimeState.Running || state.value is RuntimeState.Starting) return
-            mutableState.value = RuntimeState.Starting
+            mutableState.value = RuntimeState.Starting(RuntimeStartupPhase.LOADING_PROFILE)
             startServices()
         }
     }
@@ -62,10 +63,10 @@ class SubnetDropRuntime(
 
     suspend fun updateDisplayName(displayName: String) {
         lifecycleMutex.withLock {
-            val updatedIdentity = localIdentityService.updateDisplayName(displayName)
-            mutableIdentity.value = updatedIdentity
+            val updatedProfile = localIdentityService.updateDisplayName(displayName)
+            mutableProfile.value = updatedProfile
             if (state.value !is RuntimeState.Running && state.value !is RuntimeState.Degraded) return
-            restartDiscovery(updatedIdentity)
+            restartDiscovery(updatedProfile)
         }
     }
 
@@ -75,13 +76,17 @@ class SubnetDropRuntime(
 
     private suspend fun startServices() {
         try {
-            val identity = localIdentityService.get()
-            mutableIdentity.value = identity
+            val profile = localIdentityService.getProfile()
+            val knownPeers = peerRepository.observePeers().first()
+            mutableProfile.value = profile
+            mutableState.value = RuntimeState.Starting(RuntimeStartupPhase.RESETTING_PEERS)
             peerRepository.markAllOffline()
             observeEvents()
+            mutableState.value = RuntimeState.Starting(RuntimeStartupPhase.STARTING_TRANSPORT)
             chatTransport.start()
-            peerDiscovery.start(identity.deviceId, identity.displayName, chatTransport.listenerPort)
-            mutableState.value = RuntimeState.Running(identity)
+            mutableState.value = RuntimeState.Starting(RuntimeStartupPhase.STARTING_DISCOVERY)
+            peerDiscovery.start(profile.deviceId, profile.displayName, chatTransport.listenerPort, knownPeers)
+            mutableState.value = RuntimeState.Running(profile)
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
@@ -89,11 +94,12 @@ class SubnetDropRuntime(
         }
     }
 
-    private suspend fun restartDiscovery(identity: PublicIdentity) {
+    private suspend fun restartDiscovery(profile: DeviceProfile) {
         try {
+            val knownPeers = peerRepository.observePeers().first()
             peerDiscovery.stop()
-            peerDiscovery.start(identity.deviceId, identity.displayName, chatTransport.listenerPort)
-            mutableState.value = RuntimeState.Running(identity)
+            peerDiscovery.start(profile.deviceId, profile.displayName, chatTransport.listenerPort, knownPeers)
+            mutableState.value = RuntimeState.Running(profile)
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
@@ -158,11 +164,18 @@ class SubnetDropRuntime(
 sealed interface RuntimeState {
     data object Stopped : RuntimeState
 
-    data object Starting : RuntimeState
+    data class Starting(val phase: RuntimeStartupPhase) : RuntimeState
 
-    data class Running(val identity: PublicIdentity) : RuntimeState
+    data class Running(val profile: DeviceProfile) : RuntimeState
 
     data class Degraded(val reason: String) : RuntimeState
 
     data class Failed(val reason: String) : RuntimeState
+}
+
+enum class RuntimeStartupPhase {
+    LOADING_PROFILE,
+    RESETTING_PEERS,
+    STARTING_TRANSPORT,
+    STARTING_DISCOVERY,
 }

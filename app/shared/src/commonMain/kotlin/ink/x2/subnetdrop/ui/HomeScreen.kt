@@ -55,6 +55,7 @@ import ink.x2.subnetdrop.domain.model.PeerAvailability
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.presentation.HomeSection
 import ink.x2.subnetdrop.runtime.RuntimeState
+import ink.x2.subnetdrop.runtime.RuntimeStartupPhase
 
 @Composable
 fun HomeScreen(
@@ -109,7 +110,7 @@ private fun HomeHeader(displayName: String?) {
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text("SubnetDrop", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                text = displayName ?: "正在准备本机身份…",
+                text = displayName ?: "正在读取本机资料…",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -440,7 +441,12 @@ private fun SettingValue(icon: ImageVector, label: String, value: String) {
 
 private fun RuntimeState.label(): String = when (this) {
     RuntimeState.Stopped -> "局域网服务未启动"
-    RuntimeState.Starting -> "正在启动发现与加密通信…"
+    is RuntimeState.Starting -> when (phase) {
+        RuntimeStartupPhase.LOADING_PROFILE -> "正在读取本机资料…"
+        RuntimeStartupPhase.RESETTING_PEERS -> "正在恢复设备状态…"
+        RuntimeStartupPhase.STARTING_TRANSPORT -> "正在启动消息接收服务…"
+        RuntimeStartupPhase.STARTING_DISCOVERY -> "正在启动附近设备发现…"
+    }
     is RuntimeState.Running -> "已在线 · 仅同一局域网可见"
     is RuntimeState.Degraded -> "服务异常：$reason"
     is RuntimeState.Failed -> "启动失败：$reason"

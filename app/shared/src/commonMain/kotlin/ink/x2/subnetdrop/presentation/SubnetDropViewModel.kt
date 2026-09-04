@@ -51,7 +51,7 @@ class SubnetDropViewModel(
     val conversations = observeConversations().toUiState(emptyList())
     val candidates: StateFlow<List<PairingCandidate>> = pairingService.candidates
     val runtimeState: StateFlow<RuntimeState> = runtime.state
-    val localIdentity = runtime.identity
+    val localProfile = runtime.profile
     val selection = mutableSelection.asStateFlow()
     val notice = mutableNotice.asStateFlow()
     val section = mutableSection.asStateFlow()
@@ -84,7 +84,7 @@ class SubnetDropViewModel(
             requestPairing(peer.id)
             return
         }
-        val localDeviceId = localIdentity.value?.deviceId ?: return showError("本机身份尚未就绪")
+        val localDeviceId = localProfile.value?.deviceId ?: return showError("本机资料尚未就绪")
         mutableSelection.value = ChatSelection(
             conversationId = conversationIdFor(localDeviceId, peer.id),
             peerId = peer.id,
@@ -114,7 +114,7 @@ class SubnetDropViewModel(
 
     fun send(body: String) {
         val selected = selection.value ?: return showError("请先选择联系人")
-        val senderId = localIdentity.value?.deviceId ?: return showError("本机身份尚未就绪")
+        val senderId = localProfile.value?.deviceId ?: return showError("本机资料尚未就绪")
         launchAction("消息发送失败") {
             sendMessage(selected.conversationId, senderId, selected.peerId, body).getOrThrow()
         }
@@ -162,7 +162,7 @@ class SubnetDropViewModel(
     }
 
     private fun openTrustedIdentity(candidate: PairingCandidate) {
-        val localDeviceId = localIdentity.value?.deviceId ?: return
+        val localDeviceId = localProfile.value?.deviceId ?: return
         mutableSelection.value = ChatSelection(
             conversationId = conversationIdFor(localDeviceId, candidate.identity.deviceId),
             peerId = candidate.identity.deviceId,

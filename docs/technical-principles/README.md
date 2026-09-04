@@ -11,14 +11,15 @@
 | [点对点传输](p2p-transport.md) | 两台设备怎样建立直接连接，帧怎样交换？ |
 | [配对与端到端加密](end-to-end-encryption.md) | 怎样确认对端身份、加密内容并阻止篡改？ |
 | [可靠消息与本地存储](reliable-messaging-and-storage.md) | 消息怎样去重、重试、标记已读并在重启后恢复？ |
-| [加密文件传输](file-transfer.md) | 为什么先确认再发送，怎样分块、校验和安全落盘？ |
+| [高速文件传输](file-transfer.md) | 为什么先确认再发送，怎样使用二进制流、校验并安全落盘？ |
 | [KMP 跨平台架构](cross-platform-architecture.md) | 哪些代码共享，哪些能力必须由 Android 或桌面实现？ |
 
 ## 一条数据路径
 
 ```mermaid
 flowchart LR
-    Discovery[mDNS discovery] --> Route[Ephemeral host and port]
+    Discovery[UDP announcement] --> Probe[WebSocket reachability probe]
+    Probe --> Route[Confirmed ephemeral host and port]
     Route --> Pairing[Public-key pairing]
     Pairing --> Trust[User-confirmed trusted identity]
     Trust --> Encrypt[HPKE encryption and Ed25519 signature]

@@ -3,6 +3,8 @@ package ink.x2.subnetdrop.network.crypto
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -22,20 +24,25 @@ class AndroidSecureKeyValueStore(
         Context.MODE_PRIVATE,
     )
     private val lock = Any()
+    private var wrappingKey: SecretKey? = null
 
-    override suspend fun read(key: String): ByteArray? = synchronized(lock) {
-        preferences.getString(key, null)?.let { encoded ->
-            return@synchronized decrypt(decode(encoded), getOrCreateKey(KEY_ALIAS))
+    override suspend fun read(key: String): ByteArray? = withContext(Dispatchers.IO) {
+        synchronized(lock) {
+            preferences.getString(key, null)?.let { encoded ->
+                return@synchronized decrypt(decode(encoded), getOrCreateKey(KEY_ALIAS))
+            }
+            val legacyEncoded = legacyPreferences.getString(key, null) ?: return@synchronized null
+            val legacyKey = requireNotNull(findKey(LEGACY_KEY_ALIAS)) {
+                "Legacy identity key is unavailable"
+            }
+            decrypt(decode(legacyEncoded), legacyKey).also { value -> persist(key, value) }
         }
-        val legacyEncoded = legacyPreferences.getString(key, null) ?: return@synchronized null
-        val legacyKey = requireNotNull(findKey(LEGACY_KEY_ALIAS)) {
-            "Legacy identity key is unavailable"
-        }
-        decrypt(decode(legacyEncoded), legacyKey).also { value -> persist(key, value) }
     }
 
     override suspend fun write(key: String, value: ByteArray) {
-        synchronized(lock) { persist(key, value) }
+        withContext(Dispatchers.IO) {
+            synchronized(lock) { persist(key, value) }
+        }
     }
 
     private fun persist(key: String, value: ByteArray) {
@@ -82,7 +89,11 @@ class AndroidSecureKeyValueStore(
     }
 
     private fun getOrCreateKey(alias: String): SecretKey {
-        findKey(alias)?.let { return it }
+        wrappingKey?.let { return it }
+        findKey(alias)?.let { key ->
+            wrappingKey = key
+            return key
+        }
 
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE).run {
             init(
@@ -95,7 +106,7 @@ class AndroidSecureKeyValueStore(
                     .setKeySize(KEY_SIZE_BITS)
                     .build(),
             )
-            generateKey()
+            generateKey().also { wrappingKey = it }
         }
     }
 

@@ -23,13 +23,35 @@ class LocalIdentityServiceTest {
             )
             val original = service.get()
 
-            val updated = service.updateDisplayName("  Renamed  ")
+            service.updateDisplayName("  Renamed  ")
+            val updated = service.get()
 
             assertEquals("Renamed", repository.profile?.displayName)
             assertEquals(original.deviceId, updated.deviceId)
             assertContentEquals(original.encryptionPublicKey, updated.encryptionPublicKey)
             assertContentEquals(original.signingPublicKey, updated.signingPublicKey)
             assertEquals(updated, service.get())
+        }
+    }
+
+    @Test
+    fun loadsDiscoveryProfileWithoutGeneratingCryptographicKeys() {
+        runBlocking {
+            val store = IdentityMemoryStore()
+            val service = LocalIdentityService(
+                deviceProfileRepository = MemoryDeviceProfileRepository(),
+                secureMessageCodec = TinkSecureMessageCodec(store),
+                idGenerator = IdGenerator { "device-1" },
+                defaultDisplayName = "Device",
+            )
+
+            val profile = service.getProfile()
+
+            assertEquals("device-1", profile.deviceId)
+            assertEquals("Device", profile.displayName)
+            assertEquals(0, store.writeCount)
+            service.get()
+            assertEquals(2, store.writeCount)
         }
     }
 }
@@ -49,10 +71,13 @@ private class MemoryDeviceProfileRepository : DeviceProfileRepository {
 
 private class IdentityMemoryStore : SecureKeyValueStore {
     private val values = mutableMapOf<String, ByteArray>()
+    var writeCount: Int = 0
+        private set
 
     override suspend fun read(key: String): ByteArray? = values[key]?.copyOf()
 
     override suspend fun write(key: String, value: ByteArray) {
         values[key] = value.copyOf()
+        writeCount += 1
     }
 }
