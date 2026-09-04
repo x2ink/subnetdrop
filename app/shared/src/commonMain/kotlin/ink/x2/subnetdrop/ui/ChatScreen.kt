@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -45,9 +46,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +65,7 @@ import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.presentation.ChatSelection
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChatScreen(
@@ -82,6 +86,8 @@ fun ChatScreen(
         return
     }
     val launchFilePicker = rememberFilePickerLauncher(onSendFile, onFilePickerError)
+    val timelineListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     val openFile = { transfer: FileTransfer ->
         runCatching {
             FileKit.openFileWithDefaultApplication(PlatformFile(requireNotNull(transfer.localPath)))
@@ -97,17 +103,28 @@ fun ChatScreen(
             transfers = transfers,
             peerId = selection.peerId,
             modifier = Modifier.weight(1f),
+            listState = timelineListState,
             onRetryMessage = onRetryMessage,
             onCancelFile = onCancelFile,
             onOpenFile = openFile,
         )
-        Composer(onSend, launchFilePicker)
+        Composer(
+            onSend = onSend,
+            onAttachFile = launchFilePicker,
+            onInputFocused = {
+                coroutineScope.launch {
+                    if (timelineListState.layoutInfo.totalItemsCount > 0) {
+                        timelineListState.scrollToItem(0)
+                    }
+                }
+            },
+        )
     }
 }
 
 @Composable
 private fun ChatHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp, shadowElevation = 1.dp) {
+    Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -170,6 +187,7 @@ private fun ChatTimeline(
     transfers: List<FileTransfer>,
     peerId: String,
     modifier: Modifier,
+    listState: LazyListState,
     onRetryMessage: (Message) -> Unit,
     onCancelFile: (String) -> Unit,
     onOpenFile: (FileTransfer) -> Unit,
@@ -177,17 +195,18 @@ private fun ChatTimeline(
     val timelineItems = remember(messages, transfers, peerId) {
         buildChatTimeline(messages, transfers, peerId)
     }
-    val listState = rememberLazyListState()
-    LaunchedEffect(timelineItems.size) {
-        if (timelineItems.isNotEmpty()) listState.animateScrollToItem(timelineItems.lastIndex)
+    val displayItems = remember(timelineItems) { timelineItems.asReversed() }
+    LaunchedEffect(displayItems.firstOrNull()?.stableKey) {
+        if (displayItems.isNotEmpty()) listState.scrollToItem(0)
     }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         state = listState,
+        reverseLayout = true,
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom),
     ) {
-        items(timelineItems, key = ChatTimelineItem::stableKey) { item ->
+        items(displayItems, key = ChatTimelineItem::stableKey) { item ->
             when (item) {
                 is ChatTimelineItem.TextMessage -> MessageBubble(item.message, onRetryMessage)
                 is ChatTimelineItem.FileMessage -> FileTransferMessage(item.transfer, onCancelFile, onOpenFile)
@@ -362,7 +381,11 @@ private fun FileTransferMessage(
 }
 
 @Composable
-private fun Composer(onSend: (String) -> Unit, onAttachFile: () -> Unit) {
+private fun Composer(
+    onSend: (String) -> Unit,
+    onAttachFile: () -> Unit,
+    onInputFocused: () -> Unit,
+) {
     var text by remember { mutableStateOf("") }
     val send = {
         text.trim().takeIf(String::isNotEmpty)?.let(onSend)
@@ -380,7 +403,12 @@ private fun Composer(onSend: (String) -> Unit, onAttachFile: () -> Unit) {
             OutlinedTextField(
                 value = text,
                 onValueChange = { if (it.length <= MAX_MESSAGE_LENGTH) text = it },
-                modifier = Modifier.weight(1f).heightIn(min = 52.dp, max = 132.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 52.dp, max = 132.dp)
+                    .onFocusChanged { state ->
+                        if (state.isFocused) onInputFocused()
+                    },
                 placeholder = { Text("输入消息…") },
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 5,

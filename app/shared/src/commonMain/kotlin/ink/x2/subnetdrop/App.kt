@@ -1,5 +1,9 @@
 package ink.x2.subnetdrop
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -46,13 +50,14 @@ fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
     MaterialTheme {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+            containerColor = MaterialTheme.colorScheme.surface,
         ) { contentPadding ->
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
-                    .consumeWindowInsets(contentPadding),
+                    .consumeWindowInsets(contentPadding)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
             ) {
                 if (maxWidth >= WIDE_LAYOUT_MIN_WIDTH) {
                     val sidebarWidth = (maxWidth * SIDEBAR_WIDTH_FRACTION).coerceIn(
@@ -131,6 +136,8 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
         backStack = backStack,
         modifier = Modifier.fillMaxSize(),
         onBack = { navigateHome(backStack, viewModel) },
+        popTransitionSpec = { EnterTransition.None togetherWith ExitTransition.None },
+        predictivePopTransitionSpec = { _ -> EnterTransition.None togetherWith ExitTransition.None },
         entryProvider = { route ->
             when (route) {
                 HomeRoute -> NavEntry(route) {

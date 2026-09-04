@@ -57,3 +57,35 @@ determines the card width and 440 dp remains only an upper bound.
 Result: `BUILD SUCCESSFUL in 5s`; 45 actionable tasks, 19 executed and 26 up-to-date. `git diff --check` also passed.
 This proves both target source sets accept the measurement code and the shared logic regression remains green. Pixel-level
 measurement still requires running the UI on a target platform.
+
+## Follow-up: system-bar color and return behavior
+
+The root Scaffold now draws Material `surface` behind transparent system bars. `ChatHeader` uses the same color without a
+tonal elevation overlay, so Material3 does not tint the header while leaving the status-bar background plain. Inner content
+applies `surfaceContainerLowest` only after Scaffold system insets. Compact Navigation3 uses
+`EnterTransition.None togetherWith ExitTransition.None` for both pop and predictive-pop transitions.
+
+```shell
+./gradlew :app:shared:jvmTest :app:shared:compileAndroidMain :app:desktopApp:compileKotlin
+```
+
+Result: `BUILD SUCCESSFUL in 4s`; 45 actionable tasks, 12 executed and 33 up-to-date. This verifies the Navigation3 1.1.1
+transition API on Android and JVM. The exact OEM status-bar pixels and perceived physical-device return latency remain
+unverified because the APK was not installed.
+
+After removing the Header tonal overlay, `:app:shared:compileKotlinJvm :app:shared:compileAndroidMain` also returned
+`BUILD SUCCESSFUL in 2s`.
+
+## Follow-up: bottom anchoring during IME resize
+
+The merged timeline remains sorted chronologically for domain and test behavior, while its UI display list is reversed.
+`LazyColumn(reverseLayout = true)` places the newest stable-key item at index 0 against the bottom arrangement. New items
+use an immediate `scrollToItem(0)`, and viewport height changes preserve that bottom anchor above the composer. Composer
+focus also scrolls to index 0 before the IME resize, including when the user was previously reading older history.
+
+```shell
+./gradlew :app:shared:jvmTest :app:shared:compileAndroidMain :app:desktopApp:compileKotlin
+```
+
+Result: `BUILD SUCCESSFUL in 2s`; 45 actionable tasks, 12 executed and 33 up-to-date. No APK was installed, so the final
+IME animation and overlap behavior still require physical-device visual confirmation.

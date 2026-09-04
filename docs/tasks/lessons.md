@@ -1,5 +1,23 @@
 # 项目经验
 
+## IME 与聊天列表底部锚定
+
+- `imePadding` 只能保证输入区避开键盘；普通正向 `LazyColumn` 在 viewport 变小时会保留滚动位置，不能保证最后
+  一项仍然可见。
+- 聊天时间线要在键盘动画和窗口缩放中稳定贴住输入区，应使用最新项位于索引 0 的 `reverseLayout`。新消息只需
+  滚动到 0，列表高度变化会保持底部锚点，不依赖猜测键盘动画时长。
+- reverse layout 只会保持当前锚点；如果用户停在历史消息处，键盘弹出不会自动回到最新消息。输入框获得焦点时
+  还需要显式滚动到 0，然后再让底部锚定负责后续 IME 尺寸变化。
+
+## Edge-to-edge 顶部颜色与导航动效
+
+- 系统状态栏设为透明后，它显示的不是顶部栏自身颜色，而是系统 inset 后面的根容器颜色。要让二者完全一致，
+  Scaffold 的系统栏承载层与聊天 Header 必须使用同一个 color token，页面内容背景应从 inset 内部再绘制。
+- Material3 `Surface` 的 `tonalElevation` 会在 `surface` 上叠加主题色；即使两个区域声明同一个 token，也可能呈现
+  蓝白色差。要求像素同色的系统栏与顶部栏不能只比较 `color` 参数，还要消除 tonal overlay。
+- Navigation3 的返回默认使用 pop transition。即时通信页面如果产品要求立即返回，就应同时关闭普通 pop 和
+  predictive-pop transform；只缩短动画仍会保留“页面关闭”的视觉语义。
+
 ## 暂存区提交 Skill 的授权语义
 
 - “生成 commit message”和“帮我 commit”不是同一种授权：前者必须只读，后者可以直接提交当前暂存区，不应再要求

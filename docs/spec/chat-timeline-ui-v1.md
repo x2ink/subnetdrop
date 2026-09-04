@@ -11,6 +11,11 @@ The presentation layer combines persisted `Message` rows and current-session `Fi
 timeline. Each item has a namespaced stable key and a creation timestamp; only file transfers for the selected peer are
 included.
 
+The domain/presentation merge remains chronological. The `LazyColumn` renders that result in reverse order with
+`reverseLayout`, placing the newest stable-key item at bottom index 0. This bottom anchor is preserved when the IME reduces
+the viewport, so the composer pushes the list upward instead of covering the newest item. Focusing the composer also
+scrolls to index 0 first, covering the case where the user was reading older history before opening the keyboard.
+
 ```mermaid
 flowchart LR
     DB[SQLDelight message Flow] --> Merge[Chat timeline merge]
@@ -37,6 +42,13 @@ the remaining height, and the composer sits directly above the keyboard. The Act
 system-bar padding is explicitly consumed before the page applies IME padding so the navigation-bar inset is not counted
 twice.
 
+## System chrome and navigation
+
+The transparent Android status bar is backed by the same Material `surface` color as the chat header. Page content below
+the system inset can retain `surfaceContainerLowest`; the status-bar area must not expose that second color. Compact
+navigation disables pop and predictive-pop content transforms so returning from chat to home is immediate instead of
+looking like the whole page is closing.
+
 ## Acceptance criteria
 
 1. A single-line text message is vertically centered inside the minimum-height bubble; multiline messages grow while
@@ -48,3 +60,6 @@ twice.
 5. Read/unread and failure metadata never contributes to the text bubble's measured content.
 6. Focusing the Android input keeps the composer at the keyboard top while the message list shrinks.
 7. Desktop resizing keeps the single timeline scrollable and does not create a separate fixed-height transfer panel.
+8. The Android status bar and chat header have the same rendered background color.
+9. Returning from compact chat to home has no closing/pop animation.
+10. Opening or resizing the IME keeps the newest message immediately above the composer without overlap.

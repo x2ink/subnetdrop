@@ -1,5 +1,20 @@
 # SubnetDrop 任务状态
 
+## 当前计划：键盘与最新消息底部锚定
+
+- [x] 保持聊天页 imePadding 负责把输入区抬到键盘顶部。
+- [x] 将时间线改为底部锚定的 reverse layout，让键盘压缩可视区时从顶部收缩。
+- [x] 新消息使用稳定 key 滚动到反向列表索引 0，始终位于输入框上方。
+- [x] 输入框聚焦时回到底部，覆盖用户此前停留在历史消息位置的情况。
+- [x] 运行共享 JVM/Android 编译和差异检查，不安装 APK，并记录验证结果。
+
+## 当前计划：聊天页系统栏与返回动效
+
+- [x] 让透明状态栏的承载背景与聊天顶部栏统一为 Material surface。
+- [x] 保留页面内容的 surfaceContainerLowest 层级，不让它延伸到系统状态栏区域。
+- [x] 关闭紧凑布局返回首页时的 pop 与 predictive-pop 动画。
+- [x] 运行共享 Android/JVM 编译和差异检查，不安装 APK，并记录验证结果。
+
 ## 当前计划：暂存区自动提交 Skill
 
 - [x] 将 Skill 区分为只生成 message 和明确授权后 commit 两种模式。
@@ -102,6 +117,19 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+聊天页继续由外层 `imePadding` 把 Composer 抬到键盘顶部；时间线改为 `reverseLayout`，把倒序后的最新消息放在
+索引 0，并使用 Bottom arrangement。这样键盘动画或窗口缩放减少列表高度时，viewport 从顶部方向收缩，底部最新
+item 保持在 Composer 上方；新消息到达时也直接 `scrollToItem(0)`，不再依赖键盘动画完成时机。共享 JVM 测试、
+Android shared 编译和桌面编译通过，未安装 APK；证据补充在
+[`verification/2026-09-05-chat-timeline-ime.md`](./verification/2026-09-05-chat-timeline-ime.md)。
+
+Android 系统状态栏本身保持透明，但其后方现在由根 Scaffold 的 `MaterialTheme.colorScheme.surface` 绘制，与
+聊天 Header 使用完全相同的 token；Header 同时移除会叠加主题色的 tonal elevation，只保留阴影。页面正文的
+`surfaceContainerLowest` 背景移到系统 inset 内部，避免再次露出两段颜色。紧凑布局的 Navigation3 同时把
+`popTransitionSpec` 和 `predictivePopTransitionSpec` 设为无动画，顶部
+返回按钮与系统返回手势都会立即回到首页。共享 JVM 测试、Android shared 编译和桌面编译通过，未安装 APK；
+证据补充在 [`verification/2026-09-05-chat-timeline-ime.md`](./verification/2026-09-05-chat-timeline-ime.md)。
 
 文字消息的最小高度此前只加在 `Surface`，内部 `Text` 没有对齐容器，因此短文本会按起始位置布局；现在由
 `CenterStart` 的 `Box` 在保留水平/垂直 padding 的同时完成单行垂直居中，多行仍自然增高。文件消息移除了
