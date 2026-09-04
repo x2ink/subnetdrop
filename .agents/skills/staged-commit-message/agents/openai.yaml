@@ -1,7 +1,0 @@
-interface:
-  display_name: "Staged Commit Message"
-  short_description: "Generate or commit staged changes safely"
-  default_prompt: "Use $staged-commit-message to inspect the staging area, generate a Conventional Commit message, and commit it without pushing."
-
-policy:
-  allow_implicit_invocation: true

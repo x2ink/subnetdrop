@@ -1,0 +1,7 @@
+interface:
+  display_name: "Staged Auto Commit"
+  short_description: "Generate a message and commit staged changes"
+  default_prompt: "Use $staged-auto-commit to generate a Conventional Commit message from the staging area and commit it without pushing."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,5 +1,12 @@
 # SubnetDrop 任务状态
 
+## 当前计划：暂存区自动提交 Skill 重命名
+
+- [x] 将 Skill 从 `staged-commit-message` 重命名为 `staged-auto-commit`，同步 frontmatter 与 UI 元数据。
+- [x] 将显式调用 Skill 定义为一次普通提交的授权，自动生成 Conventional Commit 信息并立即提交暂存区。
+- [x] 保留不自动暂存、不 amend、不跳过 hook、不 push 的安全边界。
+- [x] 同步 AGENTS.md、README、经验与验证记录，并运行 Skill validator 和差异检查。
+
 ## 当前计划：键盘与最新消息底部锚定
 
 - [x] 保持聊天页 imePadding 负责把输入区抬到键盘顶部。
@@ -15,7 +22,7 @@
 - [x] 关闭紧凑布局返回首页时的 pop 与 predictive-pop 动画。
 - [x] 运行共享 Android/JVM 编译和差异检查，不安装 APK，并记录验证结果。
 
-## 当前计划：暂存区自动提交 Skill
+## 历史计划：暂存区提交信息 Skill（已被 `staged-auto-commit` 取代）
 
 - [x] 将 Skill 区分为只生成 message 和明确授权后 commit 两种模式。
 - [x] commit 模式只使用已有暂存区，不自动暂存、amend、push 或跳过 hooks。

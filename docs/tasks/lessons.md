@@ -18,13 +18,14 @@
 - Navigation3 的返回默认使用 pop transition。即时通信页面如果产品要求立即返回，就应同时关闭普通 pop 和
   predictive-pop transform；只缩短动画仍会保留“页面关闭”的视觉语义。
 
-## 暂存区提交 Skill 的授权语义
+## 暂存区自动提交 Skill 的授权语义
 
-- “生成 commit message”和“帮我 commit”不是同一种授权：前者必须只读，后者可以直接提交当前暂存区，不应再要求
-  一次确认。
+- 显式调用 `$staged-auto-commit` 本身就是提交当前暂存区的授权，不应退化为只输出 message，也不应再次询问确认。
 - 用户已经用暂存区表达了提交边界，Skill 不应擅自 `git add`、拆分或混入工作区内容；提交失败也不能用
   `--no-verify` 绕过 hook。
-- Skill 行为改变时同时检查 `agents/openai.yaml`、根 `AGENTS.md` 和 README，避免入口描述继续触发旧行为。
+- “只查看 commit message”仍是只读请求；仅在调用自动提交 Skill 或明确要求提交时执行 `git commit`。
+- Skill 行为或名称改变时同时检查目录名、frontmatter、`agents/openai.yaml`、根 `AGENTS.md` 和 README，避免旧入口
+  或旧授权语义残留。
 
 ## Compose 消息卡片测量
 
