@@ -5,7 +5,7 @@ set -euo pipefail
 repository_root=$(git rev-parse --show-toplevel)
 cd "$repository_root"
 
-printf '%s\n' "Running LAN Chat desktop/JVM checks before push..."
+printf '%s\n' "Running SubnetDrop desktop/JVM checks before push..."
 exec ./gradlew \
     :core:jvmTest \
     :data:jvmTest \

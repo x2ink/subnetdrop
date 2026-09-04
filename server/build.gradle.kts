@@ -3,10 +3,10 @@ plugins {
     alias(libs.plugins.ktor)
 }
 
-group = "ink.x2.kmp"
+group = "ink.x2.subnetdrop"
 version = "1.0.0"
 application {
-    mainClass = "ink.x2.kmp.ApplicationKt"
+    mainClass = "ink.x2.subnetdrop.ApplicationKt"
 }
 
 dependencies {

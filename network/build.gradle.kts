@@ -10,7 +10,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "ink.x2.kmp.network"
+        namespace = "ink.x2.subnetdrop.network"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 

@@ -10,7 +10,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "ink.x2.kmp.data"
+        namespace = "ink.x2.subnetdrop.data"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
@@ -42,7 +42,7 @@ kotlin {
 sqldelight {
     databases {
         create("ChatDatabase") {
-            packageName.set("ink.x2.kmp.data.db")
+            packageName.set("ink.x2.subnetdrop.data.db")
         }
     }
 }

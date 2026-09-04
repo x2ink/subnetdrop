@@ -12,17 +12,19 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(libs.kotlinx.coroutinesSwing)
     implementation(libs.koin.core)
+    implementation(libs.filekit.core)
+    implementation(libs.logback)
 
     implementation(libs.compose.uiToolingPreview)
 }
 
 compose.desktop {
     application {
-        mainClass = "ink.x2.kmp.MainKt"
+        mainClass = "ink.x2.subnetdrop.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "ink.x2.kmp"
+            packageName = "SubnetDrop"
             packageVersion = "1.0.0"
             modules(
                 "java.compiler",

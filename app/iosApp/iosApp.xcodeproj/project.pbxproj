@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		19FC93EBBAB944ADE886B3E7 /* KMP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KMP.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		19FC93EBBAB944ADE886B3E7 /* SubnetDrop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SubnetDrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		E183E54F6E9739B12953B1AC /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				19FC93EBBAB944ADE886B3E7 /* KMP.app */,
+				19FC93EBBAB944ADE886B3E7 /* SubnetDrop.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = 19FC93EBBAB944ADE886B3E7 /* KMP.app */;
+			productReference = 19FC93EBBAB944ADE886B3E7 /* SubnetDrop.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

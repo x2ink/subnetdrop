@@ -1,4 +1,4 @@
-rootProject.name = "KMP"
+rootProject.name = "SubnetDrop"
 
 pluginManagement {
     repositories {

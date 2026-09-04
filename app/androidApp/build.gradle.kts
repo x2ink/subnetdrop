@@ -22,11 +22,11 @@ dependencies {
 }
 
 android {
-    namespace = "ink.x2.kmp"
+    namespace = "ink.x2.subnetdrop"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "ink.x2.kmp"
+        applicationId = "ink.x2.subnetdrop"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
