@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm app/shared/src/androidMain/kotlin/ink/x2/subnetdrop/ui/PlatformFilePicker.android.kt)",
+      "Bash(rm app/shared/src/jvmMain/kotlin/ink/x2/subnetdrop/ui/PlatformFilePicker.jvm.kt)",
+      "Bash(rm docs/spec/kmp-ecosystem-alignment.md)",
+      "Bash(rm docs/tasks/verification/2026-09-04-mvp.md)",
+      "Bash(rm docs/tasks/verification/2026-09-04-kmp-ecosystem-alignment.md)",
+      "Bash(rm docs/tasks/verification/2026-09-04-staged-commit-message-skill.md)",
+      "Bash(rm docs/tasks/verification/2026-09-04-subnetdrop-rename.md)",
+      "Bash(rm docs/tasks/verification/android-home.png)",
+      "Bash(rm docs/tasks/verification/android-phone-e2e.png)",
+      "Bash(rm docs/tasks/verification/desktop-bottom-nav-read-state.png)",
+      "Bash(rm docs/tasks/verification/desktop-file-transfer.png)",
+      "Bash(rm docs/tasks/verification/desktop-uniform-chat-bubbles.png)",
+      "Bash(rm docs/assets/screenshots/subnetdrop-macos.png)",
+      "Bash(rm skills/staged-commit-message/SKILL.md)",
+      "Bash(rm skills/staged-commit-message/agents/openai.yaml)"
+    ]
+  }
+}
