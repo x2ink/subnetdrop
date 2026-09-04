@@ -1,6 +1,5 @@
 package ink.x2.subnetdrop
 
-import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.FileTransfer
 import ink.x2.subnetdrop.domain.model.FileTransferSettings
 import ink.x2.subnetdrop.domain.model.IncomingFileOffer
@@ -14,7 +13,6 @@ import ink.x2.subnetdrop.runtime.RuntimeState
 
 data class AppUiState(
     val peers: List<Peer>,
-    val conversations: List<Conversation>,
     val candidates: List<PairingCandidate>,
     val runtimeState: RuntimeState,
     val localDeviceId: String?,

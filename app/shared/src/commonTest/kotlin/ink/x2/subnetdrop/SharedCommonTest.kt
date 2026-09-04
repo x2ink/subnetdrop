@@ -14,17 +14,23 @@ import kotlin.test.assertEquals
 class SharedCommonTest {
 
     @Test
-    fun chatTimelineInterleavesTextAndFileMessagesAndFiltersOtherPeers() {
+    fun chatTimelineInterleavesItemsAndFiltersOtherConversationsAndPeers() {
         val messages = listOf(
             message(id = "first", createdAt = 100L),
             message(id = "last", createdAt = 300L),
+            message(id = "other-conversation", createdAt = 250L, conversationId = "alice:carol"),
         )
         val transfers = listOf(
             transfer(id = "middle", peerId = "bob", createdAt = 200L),
             transfer(id = "other-peer", peerId = "carol", createdAt = 150L),
         )
 
-        val timeline = buildChatTimeline(messages, transfers, peerId = "bob")
+        val timeline = buildChatTimeline(
+            messages = messages,
+            transfers = transfers,
+            conversationId = "alice:bob",
+            peerId = "bob",
+        )
 
         assertEquals(
             listOf("message:first", "file:middle", "message:last"),
@@ -32,9 +38,13 @@ class SharedCommonTest {
         )
     }
 
-    private fun message(id: String, createdAt: Long) = Message(
+    private fun message(
+        id: String,
+        createdAt: Long,
+        conversationId: String = "alice:bob",
+    ) = Message(
         id = id,
-        conversationId = "alice:bob",
+        conversationId = conversationId,
         senderId = "alice",
         recipientId = "bob",
         body = id,

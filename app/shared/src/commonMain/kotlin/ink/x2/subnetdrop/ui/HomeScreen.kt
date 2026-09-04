@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.x2.subnetdrop.AppUiState
-import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.PeerAvailability
 import ink.x2.subnetdrop.domain.model.TrustState
@@ -65,7 +64,6 @@ fun HomeScreen(
     modifier: Modifier,
     onSectionSelected: (HomeSection) -> Unit,
     onPeerSelected: (Peer) -> Unit,
-    onConversationSelected: (Conversation) -> Unit,
     onRetry: () -> Unit,
     onDisplayNameChanged: (String) -> Unit,
     onSaveDirectoryChanged: (String) -> Unit,
@@ -77,11 +75,6 @@ fun HomeScreen(
         RuntimeBanner(state.runtimeState, onRetry)
         when (state.section) {
             HomeSection.NEARBY -> PeerList(state.peers, Modifier.weight(1f), onPeerSelected)
-            HomeSection.CHATS -> ConversationList(
-                conversations = state.conversations,
-                modifier = Modifier.weight(1f),
-                onConversationSelected = onConversationSelected,
-            )
             HomeSection.SETTINGS -> SettingsPanel(
                 deviceId = state.localDeviceId,
                 displayName = state.localDisplayName,
@@ -101,7 +94,10 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(displayName: String?) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
@@ -165,11 +161,6 @@ private fun SectionSelector(selected: HomeSection, onSelected: (HomeSection) -> 
             selected = selected == HomeSection.NEARBY,
         ) { onSelected(HomeSection.NEARBY) }
         SectionItem(
-            label = "聊天",
-            icon = Icons.Outlined.ChatBubbleOutline,
-            selected = selected == HomeSection.CHATS,
-        ) { onSelected(HomeSection.CHATS) }
-        SectionItem(
             label = "设置",
             icon = Icons.Outlined.Settings,
             selected = selected == HomeSection.SETTINGS,
@@ -228,79 +219,6 @@ private fun PeerRow(peer: Peer, onPeerSelected: (Peer) -> Unit) {
             }
             Icon(Icons.Outlined.ChevronRight, contentDescription = "打开")
         }
-    }
-}
-
-@Composable
-private fun ConversationList(
-    conversations: List<Conversation>,
-    modifier: Modifier,
-    onConversationSelected: (Conversation) -> Unit,
-) {
-    if (conversations.isEmpty()) {
-        EmptyState(
-            title = "还没有聊天",
-            detail = "先在附近设备中完成安全配对",
-            icon = Icons.Outlined.ChatBubbleOutline,
-            modifier = modifier,
-        )
-        return
-    }
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(conversations, key = Conversation::id) { conversation ->
-            ConversationRow(conversation, onConversationSelected)
-        }
-    }
-}
-
-@Composable
-private fun ConversationRow(
-    conversation: Conversation,
-    onConversationSelected: (Conversation) -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { onConversationSelected(conversation) }) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            PeerAvatar(conversation.peerDisplayName, isOnline = false)
-            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(
-                    text = conversation.peerDisplayName,
-                    fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
-                )
-                Text(
-                    text = conversation.lastMessage ?: "开始聊天",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (conversation.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (conversation.unreadCount > 0) {
-                UnreadBadge(conversation.unreadCount)
-            }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = "打开聊天")
-        }
-    }
-}
-
-@Composable
-private fun UnreadBadge(unreadCount: Long) {
-    Surface(
-        modifier = Modifier.padding(end = 8.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.error,
-    ) {
-        Text(
-            text = if (unreadCount > MAX_VISIBLE_UNREAD_COUNT) "$MAX_VISIBLE_UNREAD_COUNT+" else unreadCount.toString(),
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onError,
-            fontWeight = FontWeight.Bold,
-        )
     }
 }
 
@@ -539,5 +457,4 @@ private fun TrustState.label(): String = when (this) {
 }
 
 private val ONLINE_COLOR = Color(0xFF2EAD68)
-private const val MAX_VISIBLE_UNREAD_COUNT = 99
 private const val MAX_DISPLAY_NAME_LENGTH = 64

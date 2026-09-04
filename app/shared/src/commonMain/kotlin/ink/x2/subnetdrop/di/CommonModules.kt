@@ -12,7 +12,6 @@ import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PeerRepository
 import ink.x2.subnetdrop.domain.port.TrustedIdentityRepository
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
-import ink.x2.subnetdrop.domain.usecase.ObserveConversationsUseCase
 import ink.x2.subnetdrop.domain.usecase.ObserveMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObservePeersUseCase
 import ink.x2.subnetdrop.domain.usecase.SendMessageUseCase
@@ -42,7 +41,6 @@ private val dataModule = module {
 
 private val domainModule = module {
     factory { ObservePeersUseCase(get()) }
-    factory { ObserveConversationsUseCase(get()) }
     factory { ObserveMessagesUseCase(get()) }
     factory { SendMessageUseCase(get(), get(), get(), get()) }
     factory { MarkConversationReadUseCase(get(), get()) }
@@ -70,7 +68,6 @@ private val presentationModule = module {
         SubnetDropViewModel(
             runtime = get(),
             observePeers = get(),
-            observeConversations = get(),
             observeMessages = get(),
             sendMessage = get(),
             markConversationRead = get(),

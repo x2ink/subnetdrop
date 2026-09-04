@@ -18,6 +18,17 @@
 - Navigation3 的返回默认使用 pop transition。即时通信页面如果产品要求立即返回，就应同时关闭普通 pop 和
   predictive-pop transform；只缩短动画仍会保留“页面关闭”的视觉语义。
 
+## Navigation3 退出条目的状态一致性
+
+- Navigation3 从 back stack 移除页面后，退出条目仍可能在同一帧参与组合。若此时 selection 驱动的消息 Flow
+  主动发出空列表，而文件传输 StateFlow 仍保留数据，聊天时间线就会瞬间退化成“只剩文件消息”。
+- 未选择会话时应切换到不发值的 `emptyFlow`，让退出条目保留最后一份文字消息；新会话渲染还必须按
+  conversation ID 过滤，避免保留值造成跨会话闪烁。
+- 页面转场期间可能同时绘制进入与退出内容，因此聊天页根节点必须绘制完整不透明背景。关闭动画不能替代正确的
+  绘制隔离和状态一致性。
+- 产品要求“无卡片阴影”时，要同时检查 `shadowElevation` 和 `tonalElevation`；后者虽然不是物理阴影，也会改变
+  Surface 的视觉层级。
+
 ## 暂存区自动提交 Skill 的授权语义
 
 - 显式调用 `$staged-auto-commit` 本身就是提交当前暂存区的授权，不应退化为只输出 message，也不应再次询问确认。

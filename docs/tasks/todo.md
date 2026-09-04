@@ -1,5 +1,13 @@
 # SubnetDrop 任务状态
 
+## 当前计划：首页导航与聊天返回稳定性
+
+- [x] 删除首页“聊天”Tab 及其只为会话列表服务的 presentation/UI 状态和回调。
+- [x] 将首页系统状态栏与顶部区域固定为白色，并保持聊天页为不透明背景。
+- [x] 移除聊天页顶部栏和输入栏的阴影/色调海拔效果。
+- [x] 返回首页时保留退出条目的文字消息快照，并按会话 ID 过滤时间线，避免只剩文件消息或跨会话闪烁。
+- [x] 补充时间线过滤回归，运行共享 JVM、Android 与桌面编译并记录验证结果。
+
 ## 当前计划：暂存区自动提交 Skill 重命名
 
 - [x] 将 Skill 从 `staged-commit-message` 重命名为 `staged-auto-commit`，同步 frontmatter 与 UI 元数据。
@@ -124,6 +132,17 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+首页底部导航现在只包含“附近设备 / 设置”，会话列表 composable、`HomeSection.CHATS`、对应的 AppUiState 字段、
+ViewModel observer/callback 和 Koin 注入均已移除；SQLDelight 的会话表仍承担消息外键和更新时间职责，不因删除入口
+而破坏本地消息存储。根 Scaffold 与 HomeHeader 使用白色，聊天 Header/Composer 不再设置 tonal 或 shadow
+elevation，聊天根 Column 明确绘制不透明背景。
+
+返回问题的根因是 `closeChat()` 把 selection 设为 null 后，消息流主动发出空列表，而 Navigation3 的退出条目仍可
+参与一帧组合，未清空的文件 StateFlow 因而单独显示。null selection 现在切换为 `emptyFlow`，保留最后的文字消息
+快照供退出条目使用；时间线又按 conversation ID 过滤保留值，切换其他设备时不会串会话。返回动作先移除 route
+再关闭 selection。共享/核心 JVM 测试、Android shared 编译和桌面编译通过，未安装 APK；证据见
+[`verification/2026-09-05-home-navigation-chat-return.md`](./verification/2026-09-05-home-navigation-chat-return.md)。
 
 聊天页继续由外层 `imePadding` 把 Composer 抬到键盘顶部；时间线改为 `reverseLayout`，把倒序后的最新消息放在
 索引 0，并使用 Bottom arrangement。这样键盘动画或窗口缩放减少列表高度时，viewport 从顶部方向收缩，底部最新

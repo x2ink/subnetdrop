@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,7 +51,7 @@ fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
     MaterialTheme {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = Color.White,
         ) { contentPadding ->
             BoxWithConstraints(
                 Modifier
@@ -90,18 +91,12 @@ fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
 
 @Composable
 private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarWidth: Dp) {
-    LaunchedEffect(ui.selection, ui.conversations) {
-        if (ui.selection == null) {
-            ui.conversations.firstOrNull()?.let(viewModel::openConversation)
-        }
-    }
     Row(Modifier.fillMaxSize()) {
         HomeScreen(
             state = ui,
             modifier = Modifier.width(sidebarWidth),
             onSectionSelected = viewModel::selectSection,
             onPeerSelected = viewModel::openPeer,
-            onConversationSelected = viewModel::openConversation,
             onRetry = viewModel::retryRuntime,
             onDisplayNameChanged = viewModel::updateDisplayName,
             onSaveDirectoryChanged = viewModel::updateSaveDirectory,
@@ -146,7 +141,6 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         modifier = Modifier.fillMaxSize(),
                         onSectionSelected = viewModel::selectSection,
                         onPeerSelected = viewModel::openPeer,
-                        onConversationSelected = viewModel::openConversation,
                         onRetry = viewModel::retryRuntime,
                         onDisplayNameChanged = viewModel::updateDisplayName,
                         onSaveDirectoryChanged = viewModel::updateSaveDirectory,
@@ -181,8 +175,8 @@ private fun syncCompactBackStack(backStack: SnapshotStateList<Any>, route: ChatR
 }
 
 private fun navigateHome(backStack: SnapshotStateList<Any>, viewModel: SubnetDropViewModel) {
-    viewModel.closeChat()
     while (backStack.size > 1) backStack.removeLast()
+    viewModel.closeChat()
 }
 
 private data object HomeRoute
@@ -192,7 +186,6 @@ private data class ChatRoute(val selection: ChatSelection)
 @Composable
 private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
     val peers by viewModel.peers.collectAsStateWithLifecycle()
-    val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val candidates by viewModel.candidates.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val profile by viewModel.localProfile.collectAsStateWithLifecycle()
@@ -205,7 +198,6 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
     val fileTransferSettings by viewModel.fileTransferSettings.collectAsStateWithLifecycle()
     return AppUiState(
         peers = peers,
-        conversations = conversations,
         candidates = candidates,
         runtimeState = runtimeState,
         localDeviceId = profile?.deviceId,

@@ -2,7 +2,6 @@ package ink.x2.subnetdrop.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
@@ -14,7 +13,6 @@ import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PairingCandidate
 import ink.x2.subnetdrop.domain.port.PairingService
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
-import ink.x2.subnetdrop.domain.usecase.ObserveConversationsUseCase
 import ink.x2.subnetdrop.domain.usecase.ObserveMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObservePeersUseCase
 import ink.x2.subnetdrop.domain.usecase.SendMessageUseCase
@@ -28,8 +26,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -37,7 +35,6 @@ import kotlinx.coroutines.launch
 class SubnetDropViewModel(
     private val runtime: SubnetDropRuntime,
     observePeers: ObservePeersUseCase,
-    observeConversations: ObserveConversationsUseCase,
     private val observeMessages: ObserveMessagesUseCase,
     private val sendMessage: SendMessageUseCase,
     private val markConversationRead: MarkConversationReadUseCase,
@@ -50,7 +47,6 @@ class SubnetDropViewModel(
     private val mutableSection = MutableStateFlow(HomeSection.NEARBY)
 
     val peers = observePeers().toUiState(emptyList())
-    val conversations = observeConversations().toUiState(emptyList())
     val candidates: StateFlow<List<PairingCandidate>> = pairingService.candidates
     val runtimeState: StateFlow<RuntimeState> = runtime.state
     val localProfile = runtime.profile
@@ -62,7 +58,7 @@ class SubnetDropViewModel(
     val fileTransferSettings = fileTransferSettingsRepository.settings
     val messages = mutableSelection
         .flatMapLatest { selected ->
-            selected?.let { observeMessages(it.conversationId) } ?: flowOf(emptyList())
+            selected?.let { observeMessages(it.conversationId) } ?: emptyFlow()
         }
         .toUiState(emptyList())
 
@@ -72,14 +68,6 @@ class SubnetDropViewModel(
 
     fun selectSection(section: HomeSection) {
         mutableSection.value = section
-    }
-
-    fun openConversation(conversation: Conversation) {
-        mutableSelection.value = ChatSelection(
-            conversationId = conversation.id,
-            peerId = conversation.peerId,
-            peerDisplayName = conversation.peerDisplayName,
-        )
     }
 
     fun openPeer(peer: Peer) {
@@ -245,7 +233,6 @@ data class UiNotice(
 
 enum class HomeSection {
     NEARBY,
-    CHATS,
     SETTINGS,
 }
 

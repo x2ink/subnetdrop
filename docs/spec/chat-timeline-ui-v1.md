@@ -8,8 +8,8 @@ keyboard from changing the message content layout.
 ## Timeline model
 
 The presentation layer combines persisted `Message` rows and current-session `FileTransfer` state into one ordered
-timeline. Each item has a namespaced stable key and a creation timestamp; only file transfers for the selected peer are
-included.
+timeline. Each item has a namespaced stable key and a creation timestamp; only messages for the selected conversation and
+file transfers for the selected peer are included.
 
 The domain/presentation merge remains chronological. The `LazyColumn` renders that result in reverse order with
 `reverseLayout`, placing the newest stable-key item at bottom index 0. This bottom anchor is preserved when the IME reduces
@@ -44,10 +44,17 @@ twice.
 
 ## System chrome and navigation
 
-The transparent Android status bar is backed by the same Material `surface` color as the chat header. Page content below
-the system inset can retain `surfaceContainerLowest`; the status-bar area must not expose that second color. Compact
-navigation disables pop and predictive-pop content transforms so returning from chat to home is immediate instead of
-looking like the whole page is closing.
+The transparent Android status bar is backed by white, and the home header uses the same white background. The chat root
+always paints an opaque `surfaceContainerLowest` background; its white header and composer use no tonal or shadow
+elevation. Compact navigation disables pop and predictive-pop content transforms so returning from chat to home is
+immediate instead of looking like the whole page is closing.
+
+The home bottom navigation contains only Nearby and Settings. Opening a trusted nearby device enters its one-to-one chat;
+there is no separate conversation-list tab or presentation observer for it.
+
+Clearing the current selection must not emit an empty text-message list while Navigation 3 may still retain the outgoing
+entry. The last list remains available until the entry is disposed, and the timeline filters text rows by conversation ID
+so a newly selected peer cannot briefly display another conversation.
 
 ## Acceptance criteria
 
@@ -60,6 +67,7 @@ looking like the whole page is closing.
 5. Read/unread and failure metadata never contributes to the text bubble's measured content.
 6. Focusing the Android input keeps the composer at the keyboard top while the message list shrinks.
 7. Desktop resizing keeps the single timeline scrollable and does not create a separate fixed-height transfer panel.
-8. The Android status bar and chat header have the same rendered background color.
-9. Returning from compact chat to home has no closing/pop animation.
+8. The Android home status bar and home header render white; the chat header and composer have no elevation shadow.
+9. Returning from compact chat to home has no closing/pop animation, file-only transient state, transparency or overlap.
 10. Opening or resizing the IME keeps the newest message immediately above the composer without overlap.
+11. The home bottom navigation exposes only Nearby and Settings.
