@@ -1,4 +1,4 @@
-# LAN Chat v1 Specification
+# SubnetDrop v1 Specification
 
 ## Goals
 
@@ -7,11 +7,12 @@
 3. Support one-to-one text conversations with live delivery status.
 4. Store conversation history locally on each device.
 5. Encrypt message content for the intended peer and authenticate the sender.
-6. Use Clean Architecture and Koin constructor injection.
+6. Transfer one file at a time after explicit receiver acceptance, with encrypted chunks and whole-file verification.
+7. Use Clean Architecture and Koin constructor injection.
 
 ## Non-goals
 
-- Group chat, Internet relay, account registration, cloud backup, multi-device history sync, media transfer, calls, and push notifications.
+- Group chat, Internet relay, NAT traversal, account registration, cloud backup, multi-device history sync, calls, and push notifications.
 - Guaranteed reachability on guest Wi-Fi, client-isolated access points, or segmented enterprise VLANs.
 - Background delivery on Android in v1 unless the foreground service is explicitly enabled.
 
@@ -23,7 +24,7 @@ On first launch the app creates a stable random device ID, a display name, an HP
 
 ### Discovery
 
-Each foreground device advertises `_lanchat._tcp.local.` with its device ID, protocol major version, display name, and listener port. Discovery results expire when mDNS removes the service or a freshness timeout is reached. IP addresses are never treated as stable identity.
+Each foreground device advertises `_subnetdrop._tcp.local.` with its device ID, protocol major version, display name, and listener port. Discovery results expire when mDNS removes the service or a freshness timeout is reached. IP addresses are never treated as stable identity.
 
 ### Pairing
 
@@ -36,6 +37,13 @@ An outgoing message is written locally as `PENDING` before network transmission.
 Incoming messages are stored unread. Opening their conversation marks them read locally and sends an Ed25519-signed read
 receipt in bounded batches. The sender accepts the receipt only from the trusted recipient and updates matching outgoing
 messages from `DELIVERED` to `READ`. Conversation summaries expose an unread count.
+
+### File transfer
+
+The sender validates and hashes one selected file, then sends encrypted metadata. The receiver must explicitly accept
+before any content is uploaded. Accepted content uses ordered, independently encrypted 24 KiB chunks over one WebSocket.
+The receiver publishes the file only after byte-count and SHA-256 verification. Detailed limits are defined in
+[file-transfer-v1.md](file-transfer-v1.md).
 
 ## Domain model
 
@@ -83,10 +91,17 @@ Initial frame types:
 - `CHAT_MESSAGE`
 - `DELIVERY_ACK`
 - `READ_RECEIPT`
+- `FILE_OFFER`
+- `FILE_DECISION`
+- `FILE_CHUNK`
+- `FILE_CANCEL`
 - `ERROR`
 - `PING` / `PONG`
 
 Message IDs make receipt idempotent. The database has a unique constraint on message ID. An ACK is safe to send repeatedly.
+Pairing identities, routing fields, acknowledgement payloads and read-receipt message IDs are not encrypted. Chat content
+and file business payloads are HPKE encrypted; protected frames are signed or return a signed acknowledgement as defined
+by their type.
 
 ## Encryption
 
@@ -101,7 +116,10 @@ HPKE provides confidentiality but not sender authentication, so signatures are m
 
 ## Local storage
 
-SQLDelight is the source of truth. Required tables are `local_identity`, `peer`, `trusted_identity`, `conversation`, and `message`. Private keysets are wrapped by platform secure storage; they are not stored as cleartext database columns. Message bodies should be encrypted at rest with a local data-encryption key before production release.
+SQLDelight is the source of truth. Required tables are `deviceProfileEntity`, `peerEntity`, `trustedIdentityEntity`,
+`conversationEntity`, and `messageEntity`. Private keysets are wrapped by platform secure storage; they are not stored as
+cleartext database columns. Message bodies are currently plaintext in SQLite and must gain at-rest encryption plus a
+migration strategy before the project claims encrypted local history.
 
 ## Dependency injection
 
@@ -121,4 +139,6 @@ Long-lived database, repository, discovery, identity, and connection-manager ins
 5. Sending a text message results in exactly one incoming row and a delivered state on the sender.
 6. Opening a conversation clears its unread count and produces a signed read receipt that updates the sender to `READ`.
 7. Restarting either application preserves identity, trust, and chat history.
-8. Android and desktop unit tests pass, and physical Android/macOS/Windows interoperability is recorded before release.
+8. A receiver can reject an offered file without receiving file bytes; an accepted file is published only after length
+   and SHA-256 verification.
+9. Android and desktop unit tests pass, and physical Android/macOS/Windows interoperability is recorded before release.

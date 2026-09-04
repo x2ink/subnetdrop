@@ -2,8 +2,8 @@
 
 ## Goal
 
-Add one-to-one file transfer between trusted LAN Chat peers without a central server. The feature is inspired by
-[LocalSend's metadata-first upload session](https://github.com/localsend/protocol), while retaining LAN Chat's existing
+Add one-to-one file transfer between trusted SubnetDrop peers without a central server. The feature is inspired by
+[LocalSend's metadata-first upload session](https://github.com/localsend/protocol), while retaining SubnetDrop's existing
 device identity and HPKE trust model.
 
 ## Product behavior
@@ -11,9 +11,11 @@ device identity and HPKE trust model.
 - A sender selects one local file from an open conversation.
 - The receiver sees the file name and size and must explicitly accept or reject the offer.
 - Accepted files show live byte progress on both devices.
-- Completed incoming files are stored in the platform download directory under a `LanChat` folder.
+- Completed incoming files are stored in the platform download directory under a `SubnetDrop` folder.
 - Failed, rejected and cancelled transfers remain visible for the current app session with an explicit state.
 - File contents are streamed in bounded chunks and are never loaded into memory as one buffer.
+- Transfer cards and progress are not persisted across application restarts in v1; successfully received files remain
+  on disk.
 
 ## Domain API
 
@@ -31,7 +33,8 @@ interface FileTransferService {
 
 ## Protocol
 
-The protocol uses the existing WebSocket endpoint and trusted peer identities.
+The protocol uses the existing Ktor WebSocket endpoint and trusted peer identities. Control requests use short-lived
+request/response sessions. After acceptance, all chunks for one file reuse a single upload session.
 
 ```mermaid
 sequenceDiagram
@@ -43,16 +46,20 @@ sequenceDiagram
     R->>R: User accepts or rejects
     R->>S: HPKE FILE_DECISION
     S-->>R: Signed delivery ACK
-    loop Sequential 24 KiB chunks
+    S->>R: Open upload WebSocket
+    loop Sequential 24 KiB chunks on the same connection
         S->>R: HPKE FILE_CHUNK
         R->>R: Validate session, order and byte count
         R-->>S: Signed chunk ACK
     end
+    S->>R: Close upload WebSocket
     R->>R: Verify total bytes and SHA-256, then rename temporary file
 ```
 
 Control payloads and chunks are encrypted and authenticated with HPKE plus Ed25519 using frame metadata as associated
 data. The SHA-256 digest protects whole-file integrity and allows validation before the temporary file becomes visible.
+The encrypted chunk is currently Base64 encoded inside a JSON text frame. This remains within the 64 KiB frame limit but
+adds encoding overhead; a future binary channel must preserve the same authenticated metadata and validation rules.
 
 ## Limits and validation
 
@@ -69,9 +76,9 @@ data. The SHA-256 digest protects whole-file integrity and allows validation bef
 
 ## Platform behavior
 
-- macOS/Windows desktop: native AWT file picker; received files use `~/Downloads/LanChat`.
-- Android: Storage Access Framework picker copies the selected content URI into app cache for streaming; received files
-  use the app-specific external Downloads directory. No Android installation is part of this iteration.
+- Android, macOS and Windows use FileKit's Compose Multiplatform launcher and platform-native file dialog.
+- Android provider-backed selections are copied through FileKit into app cache before the JVM transport reads them.
+- Desktop received files use `~/Downloads/SubnetDrop`; Android uses the app-specific external Downloads directory.
 
 ## Acceptance criteria
 
@@ -80,5 +87,6 @@ data. The SHA-256 digest protects whole-file integrity and allows validation bef
 3. Both sides expose progress and terminal state.
 4. A successful receiver file has the exact byte count and SHA-256 digest of the source.
 5. Tampered, reordered, oversized and untrusted traffic is rejected without publishing a destination file.
-6. JVM unit/integration tests and the macOS desktop package pass.
-7. The rebuilt application installs and launches on desktop without installing an Android build.
+6. JVM unit/integration tests cover accepted multi-chunk transfer, rejection and tamper/order validation.
+7. Android, macOS and Windows file selection, destination handling and cross-platform transfer are verified on their
+   target systems before release.

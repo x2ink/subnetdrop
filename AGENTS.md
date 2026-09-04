@@ -1,15 +1,15 @@
-# LAN Chat repository guidance
+# SubnetDrop repository guidance
 
 本文件约束本仓库后续开发。开始修改前先阅读本文件、`docs/ARCHITECTURE.md`、相关规格和
 `docs/tasks/lessons.md`（若存在）。更具体的目录级 `AGENTS.md` 可以补充规则，但不得降低这里的安全与质量要求。
 
 ## Product boundary
 
-- 产品是无中心的一对一局域网聊天工具，支持 Android 11+、macOS 和 Windows。
+- 产品是以加密文件直传为核心、兼具一对一即时聊天的开源局域网工具，支持 Android 11+、macOS 和 Windows。
 - 正式 Gradle 模块只有 `:core`、`:data`、`:network`、`:app:shared`、`:app:androidApp` 和
   `:app:desktopApp`。不要重新引入旧模板、中心服务器、iOS 或 Web 目标，除非需求明确要求。
 - 消息、文件和身份通信只发生在局域网受信设备之间，不引入云端转发、统计或第三方账号体系。
-- 功能和协议入口分别见 `docs/spec/lan-chat-v1.md` 与 `docs/spec/file-transfer-v1.md`。
+- 功能和协议入口分别见 `docs/spec/subnetdrop-v1.md` 与 `docs/spec/file-transfer-v1.md`。
 
 ## Architecture
 
@@ -105,7 +105,7 @@ flowchart LR
 - 协议、加密和文件传输变更必须运行：
 
 ```shell
-./gradlew :network:jvmTest --tests ink.x2.kmp.network.transport.LanChatTransportTest
+./gradlew :network:jvmTest --tests ink.x2.subnetdrop.network.transport.SubnetDropTransportTest
 ```
 
 - 不能证明成功时明确说明未验证部分。Windows MSI 和真实 Windows 互操作在 Windows 主机验证前不得标记完成。

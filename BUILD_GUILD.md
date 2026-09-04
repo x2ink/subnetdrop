@@ -1,4 +1,4 @@
-# LAN Chat 构建手册
+# SubnetDrop 构建手册
 
 本文汇总项目日常开发、测试、安装和打包命令。除 Windows 特别说明外，命令均在项目根目录执行。
 
@@ -76,10 +76,10 @@ bash scripts/setup-git-hooks.sh
 adb install -r app/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 
 # 启动应用
-adb shell am start -n ink.x2.kmp/.MainActivity
+adb shell am start -n ink.x2.subnetdrop/.MainActivity
 
 # 停止应用
-adb shell am force-stop ink.x2.kmp
+adb shell am force-stop ink.x2.subnetdrop
 ```
 
 Debug APK 输出位置：
@@ -203,12 +203,12 @@ app/desktopApp/build/compose/binaries/main-release/
 ./gradlew :core:jvmTest :data:jvmTest :network:jvmTest :app:shared:jvmTest
 
 # 只运行端到端聊天与加密文件传输测试
-./gradlew :network:jvmTest --tests ink.x2.kmp.network.transport.LanChatTransportTest
+./gradlew :network:jvmTest --tests ink.x2.subnetdrop.network.transport.SubnetDropTransportTest
 ```
 
 测试报告位于各模块的 `build/reports/tests/`。
 
-桌面端接收文件默认保存到 `~/Downloads/LanChat`。Android 使用应用专属外部 Downloads 目录，卸载应用前
+桌面端接收文件默认保存到 `~/Downloads/SubnetDrop`。Android 使用应用专属外部 Downloads 目录，卸载应用前
 应自行备份其中需要保留的文件。
 
 ## 清理与重建
