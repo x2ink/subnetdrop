@@ -1,0 +1,185 @@
+CREATE TABLE deviceProfileEntity (
+    singleton_id INTEGER NOT NULL PRIMARY KEY CHECK(singleton_id = 1),
+    device_id TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL
+);
+
+CREATE TABLE peerEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    availability TEXT NOT NULL,
+    trust_state TEXT NOT NULL,
+    last_seen_at INTEGER NOT NULL
+);
+
+CREATE TABLE trustedIdentityEntity (
+    peer_id TEXT NOT NULL PRIMARY KEY REFERENCES peerEntity(id) ON DELETE CASCADE,
+    encryption_public_key BLOB NOT NULL,
+    signing_public_key BLOB NOT NULL,
+    verified_at INTEGER NOT NULL
+);
+
+CREATE TABLE conversationEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    peer_id TEXT NOT NULL UNIQUE REFERENCES peerEntity(id) ON DELETE CASCADE,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE messageEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversationEntity(id) ON DELETE CASCADE,
+    sender_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL,
+    is_read INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
+);
+
+CREATE INDEX messageConversationCreatedAt
+ON messageEntity(conversation_id, created_at);
+
+selectDeviceProfile:
+SELECT device_id, display_name
+FROM deviceProfileEntity
+WHERE singleton_id = 1;
+
+insertDeviceProfile:
+INSERT OR IGNORE INTO deviceProfileEntity(singleton_id, device_id, display_name)
+VALUES (1, ?, ?);
+
+updateDeviceDisplayName:
+UPDATE deviceProfileEntity SET display_name = ? WHERE singleton_id = 1;
+
+selectAllPeers:
+SELECT id, display_name, host, port, availability, trust_state, last_seen_at
+FROM peerEntity
+ORDER BY availability DESC, display_name COLLATE NOCASE;
+
+findPeerById:
+SELECT id, display_name, host, port, availability, trust_state, last_seen_at
+FROM peerEntity
+WHERE id = ?;
+
+findTrustedIdentity:
+SELECT
+    trustedIdentityEntity.peer_id,
+    peerEntity.display_name,
+    trustedIdentityEntity.encryption_public_key,
+    trustedIdentityEntity.signing_public_key
+FROM trustedIdentityEntity
+JOIN peerEntity ON peerEntity.id = trustedIdentityEntity.peer_id
+WHERE trustedIdentityEntity.peer_id = ?;
+
+saveTrustedIdentity:
+INSERT OR REPLACE INTO trustedIdentityEntity(
+    peer_id,
+    encryption_public_key,
+    signing_public_key,
+    verified_at
+) VALUES (?, ?, ?, ?);
+
+markPeerTrusted:
+UPDATE peerEntity SET trust_state = 'TRUSTED' WHERE id = ?;
+
+insertPeer:
+INSERT OR IGNORE INTO peerEntity(
+    id,
+    display_name,
+    host,
+    port,
+    availability,
+    trust_state,
+    last_seen_at
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updatePeer:
+UPDATE peerEntity SET
+    display_name = ?,
+    host = ?,
+    port = ?,
+    availability = ?,
+    trust_state = ?,
+    last_seen_at = ?
+WHERE id = ?;
+
+markAllPeersOffline:
+UPDATE peerEntity SET availability = 'OFFLINE';
+
+insertConversation:
+INSERT OR IGNORE INTO conversationEntity(id, peer_id, updated_at)
+VALUES (?, ?, ?);
+
+updateConversationTimestamp:
+UPDATE conversationEntity SET updated_at = ? WHERE id = ?;
+
+insertMessage:
+INSERT OR IGNORE INTO messageEntity(
+    id,
+    conversation_id,
+    sender_id,
+    recipient_id,
+    body,
+    created_at,
+    direction,
+    status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+updateMessageStatus:
+UPDATE messageEntity SET status = ? WHERE id = ?;
+
+selectUnreadIncomingMessageIds:
+SELECT id
+FROM messageEntity
+WHERE conversation_id = ?
+    AND direction = 'INCOMING'
+    AND is_read = 0
+ORDER BY created_at, id;
+
+markConversationRead:
+UPDATE messageEntity SET is_read = 1
+WHERE conversation_id = ?
+    AND direction = 'INCOMING'
+    AND is_read = 0;
+
+markOutgoingMessagesRead:
+UPDATE messageEntity SET status = 'READ'
+WHERE recipient_id = ?
+    AND direction = 'OUTGOING'
+    AND id IN ?;
+
+containsMessage:
+SELECT EXISTS(SELECT 1 FROM messageEntity WHERE id = ?);
+
+selectMessages:
+SELECT id, conversation_id, sender_id, recipient_id, body, created_at, direction, status, is_read
+FROM messageEntity
+WHERE conversation_id = ?
+ORDER BY created_at, id;
+
+selectConversationSummaries:
+SELECT
+    conversationEntity.id,
+    conversationEntity.peer_id,
+    peerEntity.display_name AS peer_display_name,
+    (
+        SELECT body
+        FROM messageEntity
+        WHERE conversation_id = conversationEntity.id
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+    ) AS last_message,
+    conversationEntity.updated_at,
+    (
+        SELECT COUNT(*)
+        FROM messageEntity
+        WHERE conversation_id = conversationEntity.id
+            AND direction = 'INCOMING'
+            AND is_read = 0
+    ) AS unread_count
+FROM conversationEntity
+JOIN peerEntity ON peerEntity.id = conversationEntity.peer_id
+ORDER BY conversationEntity.updated_at DESC;

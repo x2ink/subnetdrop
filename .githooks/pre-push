@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+printf '%s\n' "Running LAN Chat desktop/JVM checks before push..."
+exec ./gradlew \
+    :core:jvmTest \
+    :data:jvmTest \
+    :network:jvmTest \
+    :app:shared:jvmTest \
+    :app:desktopApp:compileKotlin \
+    --no-configuration-cache
