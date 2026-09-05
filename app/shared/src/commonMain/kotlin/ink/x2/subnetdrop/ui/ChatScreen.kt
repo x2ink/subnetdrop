@@ -53,8 +53,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.PlatformFile
@@ -67,6 +73,7 @@ import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.presentation.ChatSelection
+import androidx.compose.ui.geometry.Size
 import kotlinx.coroutines.launch
 
 @Composable
@@ -238,7 +245,7 @@ private fun MessageBubble(message: Message, onRetryMessage: (Message) -> Unit) {
                 modifier = Modifier
                     .widthIn(min = MIN_BUBBLE_WIDTH, max = MAX_BUBBLE_WIDTH)
                     .heightIn(min = MIN_BUBBLE_HEIGHT),
-                shape = STRETCHABLE_BUBBLE_SHAPE,
+                shape = MessageBubbleShape(pointingLeft = !outgoing),
                 color = if (outgoing) {
                     MaterialTheme.colorScheme.primaryContainer
                 } else {
@@ -247,8 +254,18 @@ private fun MessageBubble(message: Message, onRetryMessage: (Message) -> Unit) {
             ) {
                 Box(
                     modifier = Modifier.padding(
-                        horizontal = BUBBLE_HORIZONTAL_PADDING,
-                        vertical = BUBBLE_VERTICAL_PADDING,
+                        start = if (outgoing) {
+                            BUBBLE_HORIZONTAL_PADDING
+                        } else {
+                            BUBBLE_HORIZONTAL_PADDING + 8.dp
+                        },
+                        end = if (outgoing) {
+                            BUBBLE_HORIZONTAL_PADDING + 8.dp
+                        } else {
+                            BUBBLE_HORIZONTAL_PADDING
+                        },
+                        top = BUBBLE_VERTICAL_PADDING,
+                        bottom = BUBBLE_VERTICAL_PADDING,
                     ),
                     contentAlignment = Alignment.CenterStart,
                 ) {
@@ -323,7 +340,7 @@ private fun FileTransferMessage(
             modifier = Modifier
                 .widthIn(max = MAX_FILE_MESSAGE_WIDTH)
                 .then(if (canOpen) Modifier.clickable { onOpenFile(transfer) } else Modifier),
-            shape = STRETCHABLE_BUBBLE_SHAPE,
+            shape = MessageBubbleShape(pointingLeft = !outgoing),
             color = if (outgoing) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
@@ -331,7 +348,20 @@ private fun FileTransferMessage(
             },
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier = Modifier.padding(
+                    start = if (outgoing) {
+                        BUBBLE_HORIZONTAL_PADDING
+                    } else {
+                        BUBBLE_HORIZONTAL_PADDING + 8.dp
+                    },
+                    end = if (outgoing) {
+                        BUBBLE_HORIZONTAL_PADDING + 8.dp
+                    } else {
+                        BUBBLE_HORIZONTAL_PADDING
+                    },
+                    top = BUBBLE_VERTICAL_PADDING,
+                    bottom = BUBBLE_VERTICAL_PADDING,
+                ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
@@ -377,12 +407,6 @@ private fun FileTransferMessage(
                     IconButton(onClick = { onCancelFile(transfer.id) }) {
                         Icon(Icons.Outlined.Close, contentDescription = "取消文件传输")
                     }
-                } else if (canOpen) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.OpenInNew,
-                        contentDescription = "使用系统应用打开文件",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
                 }
             }
         }
@@ -530,6 +554,140 @@ internal fun buildChatTimeline(
     transfers.filter { it.peerId == peerId }.forEach { add(ChatTimelineItem.FileMessage(it)) }
 }.sortedWith(compareBy<ChatTimelineItem>(ChatTimelineItem::createdAt).thenBy(ChatTimelineItem::stableKey))
 
+class MessageBubbleShape(
+    private val pointingLeft: Boolean,
+    private val cornerRadius: Dp = 8.dp,
+    private val tailWidth: Dp = 8.dp,
+    private val tailHeight: Dp = 16.dp,
+    private val tailTop: Dp = 16.dp
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+
+        return with(density) {
+            val radius = cornerRadius.toPx()
+            val tailW = tailWidth.toPx()
+            val tailH = tailHeight.toPx()
+            val tailY = tailTop.toPx()
+            val path = Path()
+            if (pointingLeft) {
+                path.moveTo(tailW + radius, 0f)
+                path.lineTo(size.width - radius, 0f)
+                path.quadraticBezierTo(
+                    size.width,
+                    0f,
+                    size.width,
+                    radius
+                )
+                path.lineTo(
+                    size.width,
+                    size.height - radius
+                )
+                path.quadraticBezierTo(
+                    size.width,
+                    size.height,
+                    size.width - radius,
+                    size.height
+                )
+                path.lineTo(
+                    tailW + radius,
+                    size.height
+                )
+                path.quadraticBezierTo(
+                    tailW,
+                    size.height,
+                    tailW,
+                    size.height - radius
+                )
+                path.lineTo(
+                    tailW,
+                    tailY + tailH
+                )
+                path.lineTo(
+                    0f,
+                    tailY + tailH / 2f
+                )
+                path.lineTo(
+                    tailW,
+                    tailY
+                )
+                path.lineTo(
+                    tailW,
+                    radius
+                )
+                path.quadraticBezierTo(
+                    tailW,
+                    0f,
+                    tailW + radius,
+                    0f
+                )
+            } else {
+                path.moveTo(radius, 0f)
+                path.lineTo(
+                    size.width - tailW - radius,
+                    0f
+                )
+                path.quadraticBezierTo(
+                    size.width - tailW,
+                    0f,
+                    size.width - tailW,
+                    radius
+                )
+                path.lineTo(
+                    size.width - tailW,
+                    tailY
+                )
+                path.lineTo(
+                    size.width,
+                    tailY + tailH / 2f
+                )
+                path.lineTo(
+                    size.width - tailW,
+                    tailY + tailH
+                )
+                path.lineTo(
+                    size.width - tailW,
+                    size.height - radius
+                )
+                path.quadraticBezierTo(
+                    size.width - tailW,
+                    size.height,
+                    size.width - tailW - radius,
+                    size.height
+                )
+                path.lineTo(
+                    radius,
+                    size.height
+                )
+                path.quadraticBezierTo(
+                    0f,
+                    size.height,
+                    0f,
+                    size.height - radius
+                )
+                path.lineTo(
+                    0f,
+                    radius
+                )
+                path.quadraticBezierTo(
+                    0f,
+                    0f,
+                    radius,
+                    0f
+                )
+            }
+            path.close()
+            Outline.Generic(path)
+        }
+    }
+}
+
+
+
+
 private val MAX_BUBBLE_WIDTH = 560.dp
 private val MAX_FILE_MESSAGE_WIDTH = 440.dp
 private val MAX_FILE_CONTENT_WIDTH = 320.dp
@@ -537,5 +695,5 @@ private val MIN_BUBBLE_WIDTH = 64.dp
 private val MIN_BUBBLE_HEIGHT = 48.dp
 private val BUBBLE_HORIZONTAL_PADDING = 14.dp
 private val BUBBLE_VERTICAL_PADDING = 10.dp
-private val STRETCHABLE_BUBBLE_SHAPE = RoundedCornerShape(14.dp)
+private val STRETCHABLE_BUBBLE_SHAPE = RoundedCornerShape(8.dp)
 private const val MAX_MESSAGE_LENGTH = 8_192
