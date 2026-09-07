@@ -7,7 +7,8 @@
 - Gradle Wrapper 9.1.0；始终使用仓库内的 `./gradlew` 或 `gradlew.bat`。
 - JDK 21。Gradle Daemon toolchain 已固定为 Azul JDK 21。
 - Android SDK 36；Android 最低支持 API 30。
-- macOS 构建 DMG，Windows 构建 MSI，Linux 构建 DEB。Compose Desktop 安装包不能跨操作系统构建。
+- macOS 构建 DMG，Windows 构建 MSI 或含 EXE 的便携应用目录，Linux 构建 DEB。Compose Desktop 原生产物
+  不能跨操作系统构建。
 - Android 真机需要开启开发者选项和 USB 调试，并通过 `adb devices -l` 确认为 `device` 状态。
 
 Windows PowerShell/CMD 将下文的 `./gradlew` 替换为 `gradlew.bat`。
@@ -34,7 +35,8 @@ bash scripts/setup-git-hooks.sh
 | `subnetdrop-android-debug-*` | Ubuntu 24.04 x64 | Android Debug APK |
 | `subnetdrop-macos-arm64-*` | macOS 15 Apple Silicon | 未签名 DMG |
 | `subnetdrop-macos-x64-*` | macOS 15 Intel | 未签名 DMG |
-| `subnetdrop-windows-x64-*` | Windows Server 2025 x64 | 未签名 MSI |
+| `subnetdrop-windows-x64-portable-*` | Windows Server 2022 x64 | 便携 ZIP，内含完整运行时和 `SubnetDrop.exe` |
+| `subnetdrop-windows-x64-msi-*` | Windows Server 2022 x64 | 未签名 MSI 安装包 |
 
 触发方式：
 
@@ -42,9 +44,13 @@ bash scripts/setup-git-hooks.sh
 2. 或推送名称匹配 `v*` 的标签，例如 `v0.1.0-test.1`，自动触发同一流程。
 3. 构建完成后打开对应 workflow run，在页面底部的 `Artifacts` 区域下载。
 
-工作流使用 Azul JDK 21、仓库 Gradle Wrapper 和项目已有国内依赖镜像。Android job 会先运行 JVM 回归与
-`lintDebug`；任何测试、打包或产物查找失败都会让对应 job 失败。测试包未配置发布证书，Windows SmartScreen
-和 macOS Gatekeeper 可能要求测试者手动确认来源后运行。
+工作流使用 Azul JDK 21、仓库 Gradle Wrapper 和项目已有国内依赖镜像。Android、macOS 与 Windows job 相互
+独立，单个平台失败不会阻止其他平台开始构建。原生打包前会检查 `jpackage`；Windows 还会检查 WiX 3 的
+`candle.exe` 和 `light.exe`。原生打包关闭 configuration cache 并输出完整 Gradle `--info` 日志，避免失败时只留下
+无法定位的退出码。任何打包或产物查找失败都会让对应 job 失败。
+
+测试包未配置发布证书，Windows SmartScreen 和 macOS Gatekeeper 可能要求测试者手动确认来源后运行。便携 ZIP
+不是单文件程序：必须解压并保留整个 `SubnetDrop` 目录，不能只复制其中的 `SubnetDrop.exe`。
 
 ## 环境与工程检查
 
@@ -175,6 +181,7 @@ app/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 ./gradlew :app:desktopApp:packageDmg
 
 # Windows
+gradlew.bat :app:desktopApp:createDistributable
 gradlew.bat :app:desktopApp:packageMsi
 
 # Linux
@@ -206,6 +213,11 @@ gradlew.bat :app:desktopApp:packageReleaseMsi
 app/desktopApp/build/compose/binaries/main/
 app/desktopApp/build/compose/binaries/main-release/
 ```
+
+Windows 的 `createDistributable` 结果位于
+`app/desktopApp/build/compose/binaries/main/app/SubnetDrop/`，其中包含 `SubnetDrop.exe`、运行时和依赖库。
+GitHub Actions 会把整个目录压缩为 `SubnetDrop-windows-x64-portable.zip`；`packageMsi` 的结果位于同级
+`msi/` 目录。
 
 ## 分层测试
 

@@ -57,9 +57,8 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-  desktop:
+  macos:
     name: ${{ matrix.displayName }}
-    needs: android
     strategy:
       fail-fast: false
       matrix:
@@ -67,23 +66,11 @@ jobs:
           - displayName: macOS Apple Silicon DMG
             platform: macos-arm64
             runner: macos-15
-            gradleCommand: ./gradlew
-            gradleTask: :app:desktopApp:packageDmg
-            artifactPath: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
           - displayName: macOS Intel DMG
             platform: macos-x64
             runner: macos-15-intel
-            gradleCommand: ./gradlew
-            gradleTask: :app:desktopApp:packageDmg
-            artifactPath: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
-          - displayName: Windows x64 MSI
-            platform: windows-x64
-            runner: windows-2025
-            gradleCommand: ./gradlew.bat
-            gradleTask: :app:desktopApp:packageMsi
-            artifactPath: app/desktopApp/build/compose/binaries/main/msi/*.msi
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out sources
@@ -102,14 +89,135 @@ jobs:
         with:
           cache-provider: basic
 
-      - name: Build desktop package
-        run: ${{ matrix.gradleCommand }} ${{ matrix.gradleTask }} --stacktrace
+      - name: Verify macOS packaging tools
+        run: |
+          java -version
+          jpackage --version
+          uname -m
+          xcode-select -p
+          command -v hdiutil
 
-      - name: Upload desktop package
+      - name: Build macOS DMG
+        run: >-
+          ./gradlew
+          :app:desktopApp:packageDmg
+          --no-configuration-cache
+          --stacktrace
+          --info
+
+      - name: Upload macOS DMG
         uses: actions/upload-artifact@v6
         with:
           name: subnetdrop-${{ matrix.platform }}-${{ github.run_number }}
-          path: ${{ matrix.artifactPath }}
+          path: app/desktopApp/build/compose/binaries/main/dmg/*.dmg
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+
+      - name: Upload macOS packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: subnetdrop-${{ matrix.platform }}-diagnostics-${{ github.run_number }}
+          path: |
+            build/reports/problems/**
+            app/desktopApp/build/compose/tmp/**/*.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows:
+    name: Windows x64 MSI and portable ZIP
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Azul JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-disabled: true
+
+      - name: Add WiX Toolset to PATH
+        shell: pwsh
+        run: |
+          $wixBin = Join-Path ${env:ProgramFiles(x86)} "WiX Toolset v3.14\bin"
+          if (-not (Test-Path (Join-Path $wixBin "candle.exe"))) {
+              throw "WiX candle.exe was not found in $wixBin"
+          }
+          $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify Windows packaging tools
+        shell: pwsh
+        run: |
+          java -version
+          jpackage --version
+          Get-Command candle.exe
+          Get-Command light.exe
+
+      - name: Build Windows portable app
+        shell: pwsh
+        run: >-
+          .\gradlew.bat
+          :app:desktopApp:createDistributable
+          --no-configuration-cache
+          --stacktrace
+          --info
+
+      - name: Create Windows portable ZIP
+        shell: pwsh
+        run: |
+          $appDir = "app/desktopApp/build/compose/binaries/main/app/SubnetDrop"
+          $executable = Join-Path $appDir "SubnetDrop.exe"
+          $zipPath = "app/desktopApp/build/compose/binaries/main/SubnetDrop-windows-x64-portable.zip"
+          if (-not (Test-Path $executable)) {
+              throw "Portable executable was not found at $executable"
+          }
+          Compress-Archive -Path $appDir -DestinationPath $zipPath -Force
+
+      - name: Upload Windows portable ZIP
+        uses: actions/upload-artifact@v6
+        with:
+          name: subnetdrop-windows-x64-portable-${{ github.run_number }}
+          path: app/desktopApp/build/compose/binaries/main/SubnetDrop-windows-x64-portable.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Build Windows MSI
+        shell: pwsh
+        run: >-
+          .\gradlew.bat
+          :app:desktopApp:packageMsi
+          --no-configuration-cache
+          --stacktrace
+          --info
+
+      - name: Upload Windows MSI
+        uses: actions/upload-artifact@v6
+        with:
+          name: subnetdrop-windows-x64-msi-${{ github.run_number }}
+          path: app/desktopApp/build/compose/binaries/main/msi/*.msi
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload Windows packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: subnetdrop-windows-x64-diagnostics-${{ github.run_number }}
+          path: |
+            build/reports/problems/**
+            app/desktopApp/build/compose/tmp/**/*.txt
+          if-no-files-found: warn
+          retention-days: 14

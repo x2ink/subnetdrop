@@ -1,5 +1,13 @@
 # SubnetDrop 任务状态
 
+## 当前计划：GitHub Actions 桌面测试包修复
+
+- [x] 将 macOS Intel、macOS Apple Silicon 与 Windows 从 Android job 解耦，分别输出可定位的打包日志。
+- [x] 固定目标系统打包工具检查，并关闭原生打包任务的 configuration cache。
+- [x] Windows 同时生成便携 ZIP（内含可执行 EXE）与 MSI 安装包，并分别上传 Artifact。
+- [x] 更新 README 与构建手册，明确产物形式、Runner 和未签名测试限制。
+- [x] 本机复现 Apple Silicon DMG、校验 Gradle 任务与工作流语法，记录 Windows Runner 待验证边界。
+
 ## 当前计划：MediaStore 完成校验
 
 - [x] 接收完成时显式校验协议累计字节数，错误信息包含期望值和实际值。
@@ -204,6 +212,18 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+公开可见的历史 Actions run `33881533832` 中，Android 与 macOS Intel job 成功，实际失败的是 Windows MSI 和
+macOS Apple Silicon DMG；公开接口只保留退出码，无法恢复具体 Gradle 异常。当前工作流已将三个桌面目标从 Android
+job 解耦，并在原生打包前显式验证 JDK `jpackage`、macOS `hdiutil` 和 Windows WiX 3。原生任务关闭 configuration
+cache、启用 `--info`，失败时额外上传 Gradle problems report 和 Compose 打包参数，后续不再只有 exit code 1。
+
+Windows 改用当前仍预装 WiX 3.14 的 `windows-2022` Runner，并关闭曾出现 tar 路径警告的 Gradle User Home 缓存。
+Windows job 先用 `createDistributable` 生成包含 `SubnetDrop.exe` 和完整运行时的便携目录、压缩并上传 ZIP，再构建和
+上传 MSI；因此 MSI 失败也不会吞掉已经完成的便携产物。本机 Azul JDK 21.0.11 ARM64 以与 CI 相同参数重新生成
+139 MiB DMG 成功，入口是 ARM64 Mach-O；Gradle 任务名、YAML 结构和 diff 检查通过。Windows MSI/ZIP 与 GitHub
+双架构 DMG 仍需提交并推送本次工作流后由目标 Runner 验证，证据见
+[`verification/2026-09-07-github-actions-desktop-packages.md`](./verification/2026-09-07-github-actions-desktop-packages.md)。
 
 截图中的 `INVALID_REQUEST: Received file size does not match offer` 是 MediaStore pending 条目的元数据误判：
 FileKit 的 `size()` 查询 `OpenableColumns.SIZE`，部分 Android 内容提供方在文件发布前返回 `0`、`-1` 或尚未刷新的值。

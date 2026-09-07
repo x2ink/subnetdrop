@@ -47,6 +47,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [跨平台文字消息选择与复制验证](tasks/verification/2026-09-07-message-text-selection.md)
 - [暂存区自动提交 Skill 验证](tasks/verification/2026-09-05-staged-commit-skill.md)
 - [GitHub Actions 测试安装包验证](tasks/verification/2026-09-04-github-actions-test-packages.md)
+- [GitHub Actions 桌面测试包修复](tasks/verification/2026-09-07-github-actions-desktop-packages.md)
 
 ## 系统上下文
 
