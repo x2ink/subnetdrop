@@ -87,7 +87,7 @@ internal class UdpPeerDiscovery(
     }
 
     override suspend fun stop() {
-        val job = lifecycleMutex.withLock {
+        lifecycleMutex.withLock {
             val activeJob = sessionJob ?: return
             sessionJob = null
             sessionScope = null
@@ -95,15 +95,14 @@ internal class UdpPeerDiscovery(
             sockets.forEach(MulticastSocket::close)
             sockets = emptyList()
             localAnnouncement = null
-            activeJob
-        }
-        withContext(NonCancellable) {
-            job.cancelAndJoin()
-            peerMutex.withLock {
-                livenessTracker.clear()
-                probesInFlight.clear()
+            withContext(NonCancellable) {
+                activeJob.cancelAndJoin()
+                peerMutex.withLock {
+                    livenessTracker.clear()
+                    probesInFlight.clear()
+                }
+                releaseMulticast()
             }
-            releaseMulticast()
         }
     }
 
@@ -113,13 +112,16 @@ internal class UdpPeerDiscovery(
         knownPeers: List<Peer>,
         localDeviceId: String,
     ) {
+        val knownRemotePeers = knownPeers.filterNot { it.id == localDeviceId }
+        // start() holds lifecycleMutex and no session coroutine exists yet, so initialization cannot race with probes.
+        livenessTracker.rememberKnown(knownRemotePeers)
         if (openedSockets.isEmpty()) {
             mutableEvents.tryEmit(DiscoveryEvent.Failure("没有可用的局域网组播接口"))
         } else {
             openedSockets.forEach { socket -> scope.launch { receiveLoop(socket, localDeviceId) } }
             scope.launch { announcementLoop() }
         }
-        knownPeers.filterNot { it.id == localDeviceId }.forEach(::scheduleProbe)
+        knownRemotePeers.forEach(::scheduleProbe)
         scope.launch { heartbeatLoop() }
     }
 
@@ -159,7 +161,7 @@ internal class UdpPeerDiscovery(
     private suspend fun heartbeatLoop() {
         while (currentCoroutineContext().isActive) {
             delay(HEARTBEAT_INTERVAL_MS)
-            val peers = peerMutex.withLock { livenessTracker.peers() }
+            val peers = peerMutex.withLock { livenessTracker.probeTargets(timestampProvider.nowMillis()) }
             peers.forEach(::scheduleProbe)
         }
     }
@@ -176,7 +178,9 @@ internal class UdpPeerDiscovery(
             } catch (_: Exception) {
                 recordProbeResult(peer, reachable = false)
             } finally {
-                peerMutex.withLock { probesInFlight.remove(peer.id) }
+                withContext(NonCancellable) {
+                    peerMutex.withLock { probesInFlight.remove(peer.id) }
+                }
             }
         }
     }
@@ -219,7 +223,15 @@ internal class UdpPeerDiscovery(
         .filter { it.isUsableForDiscovery() }
 
     private fun NetworkInterface.isUsableForDiscovery(): Boolean = runCatching {
-        isUp && !isLoopback && supportsMulticast() && Collections.list(inetAddresses).any { it is Inet4Address }
+        DiscoveryInterfaceCapabilities(
+            name = name,
+            isUp = isUp,
+            isLoopback = isLoopback,
+            isPointToPoint = isPointToPoint,
+            isVirtual = isVirtual,
+            supportsMulticast = supportsMulticast(),
+            hasIpv4Address = Collections.list(inetAddresses).any { it is Inet4Address },
+        ).isUsableForLanDiscovery()
     }.getOrDefault(false)
 
     private fun DiscoveryPacket.toPeer(source: InetAddress): Peer? {
@@ -264,52 +276,147 @@ internal class UdpPeerDiscovery(
     }
 }
 
+internal data class DiscoveryInterfaceCapabilities(
+    val name: String,
+    val isUp: Boolean,
+    val isLoopback: Boolean,
+    val isPointToPoint: Boolean,
+    val isVirtual: Boolean,
+    val supportsMulticast: Boolean,
+    val hasIpv4Address: Boolean,
+) {
+    fun isUsableForLanDiscovery(): Boolean {
+        val normalizedName = name.lowercase()
+        return isUp &&
+            !isLoopback &&
+            !isPointToPoint &&
+            !isVirtual &&
+            supportsMulticast &&
+            hasIpv4Address &&
+            TUNNEL_INTERFACE_PREFIXES.none(normalizedName::startsWith)
+    }
+
+    private companion object {
+        val TUNNEL_INTERFACE_PREFIXES = listOf(
+            "tun",
+            "tap",
+            "utun",
+            "ppp",
+            "ipsec",
+            "wg",
+            "vpn",
+            "tailscale",
+        )
+    }
+}
+
 internal class PeerLivenessTracker(
     private val offlineFailureThreshold: Int,
+    private val onlineProbeIntervalMillis: Long = 5_000L,
+    private val maxOfflineProbeIntervalMillis: Long = 30_000L,
 ) {
-    private val confirmedPeers = mutableMapOf<String, PeerHealth>()
+    private val trackedPeers = mutableMapOf<String, PeerHealth>()
 
     init {
         require(offlineFailureThreshold > 0) { "offlineFailureThreshold must be positive" }
+        require(onlineProbeIntervalMillis > 0) { "onlineProbeIntervalMillis must be positive" }
+        require(maxOfflineProbeIntervalMillis >= onlineProbeIntervalMillis) {
+            "maxOfflineProbeIntervalMillis must not be shorter than onlineProbeIntervalMillis"
+        }
     }
 
-    fun peers(): List<Peer> = confirmedPeers.values.map(PeerHealth::peer)
+    fun rememberKnown(peers: List<Peer>) {
+        peers.forEach { peer ->
+            trackedPeers.putIfAbsent(
+                peer.id,
+                PeerHealth(
+                    peer = peer.copy(availability = PeerAvailability.OFFLINE),
+                    failedProbes = 0,
+                    offlineRetryCount = 0,
+                    nextProbeAt = 0L,
+                ),
+            )
+        }
+    }
+
+    fun probeTargets(timestamp: Long): List<Peer> = trackedPeers.values
+        .filter { it.nextProbeAt <= timestamp }
+        .map(PeerHealth::peer)
 
     fun clear() {
-        confirmedPeers.clear()
+        trackedPeers.clear()
     }
 
     fun record(peer: Peer, reachable: Boolean, timestamp: Long): DiscoveryEvent? {
-        val current = confirmedPeers[peer.id]
+        val current = trackedPeers[peer.id]
         if (reachable) {
             val confirmed = peer.copy(
                 availability = PeerAvailability.ONLINE,
                 lastSeenAt = timestamp,
             )
-            confirmedPeers[peer.id] = PeerHealth(confirmed, 0)
-            return if (current == null || current.peer.endpointChanged(confirmed) || current.failedProbes > 0) {
+            trackedPeers[peer.id] = PeerHealth(
+                peer = confirmed,
+                failedProbes = 0,
+                offlineRetryCount = 0,
+                nextProbeAt = timestamp + onlineProbeIntervalMillis,
+            )
+            return if (
+                current == null ||
+                current.peer.availability == PeerAvailability.OFFLINE ||
+                current.peer.endpointChanged(confirmed) ||
+                current.failedProbes > 0
+            ) {
                 DiscoveryEvent.Found(confirmed)
             } else {
                 null
             }
         }
         if (current == null) return null
-        val failedProbes = current.failedProbes + 1
+        if (current.peer.networkEndpointChanged(peer)) return null
+        val failedProbes = minOf(current.failedProbes + 1, offlineFailureThreshold)
         if (failedProbes < offlineFailureThreshold) {
-            confirmedPeers[peer.id] = current.copy(failedProbes = failedProbes)
+            trackedPeers[peer.id] = current.copy(
+                failedProbes = failedProbes,
+                nextProbeAt = timestamp + onlineProbeIntervalMillis,
+            )
             return null
         }
-        confirmedPeers.remove(peer.id)
-        return DiscoveryEvent.Lost(peer.id)
+        val wasOnline = current.peer.availability == PeerAvailability.ONLINE
+        val offlineRetryCount = if (wasOnline) 0 else current.offlineRetryCount + 1
+        val retryDelay = offlineRetryDelay(if (wasOnline) 0 else current.offlineRetryCount)
+        trackedPeers[peer.id] = current.copy(
+            peer = current.peer.copy(availability = PeerAvailability.OFFLINE),
+            failedProbes = failedProbes,
+            offlineRetryCount = offlineRetryCount,
+            nextProbeAt = timestamp + retryDelay,
+        )
+        return if (wasOnline) {
+            DiscoveryEvent.Lost(peer.id)
+        } else {
+            null
+        }
+    }
+
+    private fun offlineRetryDelay(retryCount: Int): Long {
+        val exponent = retryCount.coerceIn(0, MAX_BACKOFF_EXPONENT)
+        return (onlineProbeIntervalMillis * (1L shl exponent)).coerceAtMost(maxOfflineProbeIntervalMillis)
     }
 
     private fun Peer.endpointChanged(other: Peer): Boolean =
         host != other.host || port != other.port || displayName != other.displayName
 
+    private fun Peer.networkEndpointChanged(other: Peer): Boolean = host != other.host || port != other.port
+
     private data class PeerHealth(
         val peer: Peer,
         val failedProbes: Int,
+        val offlineRetryCount: Int,
+        val nextProbeAt: Long,
     )
+
+    private companion object {
+        const val MAX_BACKOFF_EXPONENT = 30
+    }
 }
 
 @Serializable

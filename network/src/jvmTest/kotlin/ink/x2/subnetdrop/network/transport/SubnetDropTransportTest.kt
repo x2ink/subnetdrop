@@ -24,11 +24,15 @@ import ink.x2.subnetdrop.network.crypto.SecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.TinkSecureMessageCodec
 import ink.x2.subnetdrop.network.identity.LocalIdentityService
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.RandomAccessFile
@@ -279,6 +283,57 @@ class SubnetDropTransportTest {
     }
 
     @Test
+    fun senderProgressNeverRunsAheadOfReceiverConfirmedBytes() {
+        runBlocking {
+            val alice = TestNode("alice-progress", availablePort())
+            val bob = TestNode("bob-progress", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                val sourceSize = 10 * 1_024 * 1_024
+                val source = File(alice.workingDirectory, "progress.bin").apply {
+                    writeBytes(ByteArray(sourceSize) { index -> (index % 251).toByte() })
+                }
+                val observedProgress = mutableListOf<Pair<Long, Long>>()
+                val monitor = launch {
+                    combine(alice.transport.transfers, bob.transport.transfers) { outgoing, incoming ->
+                        val sent = outgoing.singleOrNull()?.transferredBytes
+                        val received = incoming.singleOrNull()?.transferredBytes
+                        if (sent == null || received == null) null else sent to received
+                    }.collect { progress ->
+                        progress?.let(observedProgress::add)
+                    }
+                }
+                yield()
+
+                alice.transport.sendFile(
+                    bob.id,
+                    LocalFile(source.name, source.path, source.length(), "application/octet-stream"),
+                )
+                monitor.cancelAndJoin()
+
+                assertTrue(observedProgress.any { (sent, _) -> sent in 1 until source.length() })
+                assertTrue(observedProgress.all { (sent, received) -> sent <= received })
+                assertTrue(
+                    observedProgress.all { (sent, received) -> received - sent <= FILE_PROGRESS_WINDOW_BYTES },
+                )
+                assertEquals(source.length(), alice.transport.transfers.value.single().transferredBytes)
+                assertEquals(source.length(), bob.transport.transfers.value.single().transferredBytes)
+                assertContentEquals(
+                    source.readBytes(),
+                    File(bob.fileSettings.saveDirectory, source.name).readBytes(),
+                )
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
+
+    @Test
     fun batchFailureDoesNotCancelSuccessfulSibling() {
         runBlocking {
             val alice = TestNode("alice-partial-failure", availablePort())
@@ -349,6 +404,8 @@ class SubnetDropTransportTest {
         }
     }
 }
+
+private const val FILE_PROGRESS_WINDOW_BYTES = 4L * 1_024L * 1_024L
 
 private class TestNode(
     val id: String,

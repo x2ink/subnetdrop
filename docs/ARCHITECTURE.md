@@ -37,6 +37,9 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [当前平台与桌面验证](tasks/verification/2026-09-04-current-platform-status.md)
 - [Android Navigation3 状态刷新验证](tasks/verification/2026-09-05-android-nav-state.md)
 - [UDP 设备发现与在线状态验证](tasks/verification/2026-09-05-udp-discovery.md)
+- [VPN 与局域网发现共存验证](tasks/verification/2026-09-07-vpn-lan-discovery.md)
+- [离线设备自动恢复验证](tasks/verification/2026-09-07-offline-peer-recovery.md)
+- [文件进度同步与吞吐优化验证](tasks/verification/2026-09-07-file-progress-throughput.md)
 - [聊天时间线与 Android IME 验证](tasks/verification/2026-09-05-chat-timeline-ime.md)
 - [首页导航与聊天返回验证](tasks/verification/2026-09-05-home-navigation-chat-return.md)
 - [文件设置、系统打开与 Android 系统栏验证](tasks/verification/2026-09-05-file-settings-system-bars.md)
@@ -100,6 +103,10 @@ sequenceDiagram
     A-->>B: UDP multicast announcement
     B->>A: WebSocket PING
     A-->>B: PONG, peer confirmed online
+    loop Known endpoint heartbeat with capped offline backoff
+        B->>A: WebSocket PING
+        A-->>B: PONG or timeout
+    end
     A->>B: WebSocket PAIR_REQUEST with public identity
     B-->>A: PAIR_RESPONSE with public identity
     A->>A: Calculate and confirm safety code
@@ -118,7 +125,9 @@ sequenceDiagram
     end
     A->>B: Signed FILE_STREAM_START per file
     loop Ordered 512 KiB chunks per session
-        A->>B: Plain binary frame; each peer updates local progress
+        A->>B: Plain binary frame
+        A->>B: Signed checkpoint every 4 MiB
+        B-->>A: Signed receiver-confirmed progress
     end
     A->>B: Signed FILE_STREAM_COMPLETE with SHA-256
     B-->>A: Signed DELIVERY_ACK
@@ -158,7 +167,7 @@ interface TrustedIdentityRepository
 
 | 能力 | Android | macOS / Windows Desktop |
 |---|---|---|
-| 服务发现 | 共享 UDP 组播 + Wi-Fi multicast lock | 共享 UDP 组播 |
+| 服务发现 | 共享 UDP 组播 + multicast lock；发现会话绑定 IPv4 Wi-Fi，避开 VPN 默认路由 | 共享 UDP 组播；排除 VPN/隧道虚拟网卡 |
 | 私钥保护 | Android Keystore 包装本地 keyset | java-keyring 对接 Keychain / Credential Manager |
 | 数据库驱动 | SQLDelight Android driver | SQLDelight SQLite JDBC driver |
 | 文件选择 | FileKit Android provider | FileKit 原生桌面对话框 |

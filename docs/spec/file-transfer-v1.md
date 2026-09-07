@@ -74,6 +74,11 @@ sequenceDiagram
         S->>R: Plain binary frame
         S->>S: Update SHA-256
         R->>R: Validate byte count and update SHA-256
+        opt At each bounded progress window
+            S->>R: Signed FILE_STREAM_PROGRESS checkpoint
+            R-->>S: Signed FILE_STREAM_PROGRESS with confirmed bytes
+            S->>S: Publish receiver-confirmed progress
+        end
     end
     S->>R: Signed FILE_STREAM_COMPLETE with SHA-256
     R->>R: Verify total bytes and SHA-256, then rename temporary file
@@ -85,12 +90,19 @@ binary WebSocket frames without Base64 conversion or per-chunk acknowledgement. 
 streaming, and the signed completion frame binds the sender's final digest to the authenticated transfer. This detects
 modification but does not hide the file from an observer on the same network.
 
+The sender must not expose bytes merely queued in its local WebSocket channel as delivered progress. After each 4 MiB
+window, it sends a signed progress checkpoint on the ordered upload connection. The receiver acknowledges only when all
+preceding chunks have been validated and written to the temporary-file sink. Both cards then publish that confirmed byte
+count. This bounds drift and memory without adding a round trip for every 512 KiB chunk. Client outgoing and server incoming
+WebSocket queues are bounded so TCP backpressure reaches the source reader instead of buffering an entire large file.
+
 ## Limits and validation
 
 - Trusted peers only.
 - One file per transfer session, up to 50 files per picker batch and three active outgoing sessions per process.
 - Configurable per-device file size: 1–1024 GiB, default 10 GiB. The 1024 GiB ceiling is also the protocol hard limit.
 - Binary chunk size: 512 KiB.
+- Progress acknowledgement window: 4 MiB, with a final checkpoint before completion when needed.
 - Maximum file name length: 255 characters.
 - File names are reduced to a leaf name; path separators, blank names and control characters are rejected.
 - Chunks must arrive exactly once and in ascending order.

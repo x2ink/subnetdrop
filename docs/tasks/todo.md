@@ -1,5 +1,28 @@
 # SubnetDrop 任务状态
 
+## 当前计划：离线设备自动恢复
+
+- [x] 将已知设备端点与当前在线状态解耦，首次探测失败后仍保留单播重试目标。
+- [x] 连续失败达到阈值时只发布离线事件，不删除端点；恢复可达后重新发布在线事件。
+- [x] 避免未验证的变更地址探测失败污染已确认端点的健康状态。
+- [x] 补充首次失败恢复、连续失败恢复和端点变更隔离测试。
+- [x] 更新发现规格、技术原理和验证记录，运行网络、桌面与 Android 构建，不安装 Android 应用。
+
+## 当前计划：文件传输进度同步与吞吐优化
+
+- [x] 将发送端展示进度改为接收端确认的落盘进度，使用有界窗口确认而不是逐块 ACK。
+- [x] 限制 Ktor WebSocket 收发队列容量，避免大文件被提前堆入内存并让 TCP 背压真正生效。
+- [x] 将接收端文件写入与 SHA-256 计算移出 Ktor 调度线程，并降低 StateFlow 高频更新开销。
+- [x] 补充进度一致性、窗口校验、文件完整性和并行传输回归测试。
+- [x] 更新协议、技术原理和验证记录，运行网络专项、完整 JVM、桌面与 Android 构建，不安装 Android 应用。
+
+## 当前计划：VPN 开启时保持局域网发现
+
+- [x] 排除 point-to-point 与虚拟 VPN 网卡，只在真实 IPv4 LAN 网卡加入和发送组播。
+- [x] Android 发现会话启动时将本应用进程绑定到当前 Wi-Fi Network，停止时恢复系统默认网络。
+- [x] 为网卡选择规则补充纯逻辑测试，并验证无 Wi-Fi/绑定失败时安全降级。
+- [x] 更新发现规格、技术边界与经验，运行网络、桌面及 Android 构建验证，不安装 Android 应用。
+
 ## 当前计划：跨平台文字消息选择与复制
 
 - [x] 仅为文字消息正文启用 Compose 官方选择容器，不让送达状态和文件卡片进入选择范围。
@@ -167,6 +190,37 @@
 
 ## 审查记录
 
+本次桌面端找不到 Android 并非 Wi-Fi、组播或 VPN 路由本身不通：两端分别位于同一 `/23` 网段，桌面可以收到
+Android 的 UDP 公告，也能连通 Android 的 TCP `45892` 并收到 WebSocket PONG。运行时 JFR 显示 Android 每
+5 秒主动探测桌面，但桌面没有再向 Android 发起探测。根因是发现状态机在首次竞态或连续失败后把端点从
+`PeerLivenessTracker` 删除，而数据库中的已知地址只在服务启动时探测一次；只要后续组播公告没有再次进入探测，
+设备就会永久停留在 OFFLINE。
+
+发现层现在将“记住端点”和“当前在线”解耦：在线设备保持 5 秒心跳，离线端点按 5、10、20、30 秒封顶退避继续
+单播探测，恢复后重新发布 ONLINE，不依赖再次收到组播。未验证的新地址失败不会污染已确认路由；停止与重启发现
+会话的清理在同一生命周期锁内完成，探测协程取消时也一定释放 in-flight 标记。9 个发现测试、完整 JVM 回归、
+桌面编译和 Android Debug APK 构建通过，未安装 Android 应用。保持桌面 VPN 开启且不改动手机端，重启桌面后
+数据库中的 PGFM10 已从 OFFLINE 恢复为 ONLINE，并出现桌面到 `192.168.21.100:45892` 的已建立 TCP 连接。证据见
+[`verification/2026-09-07-offline-peer-recovery.md`](./verification/2026-09-07-offline-peer-recovery.md)。
+
+截图中的发送端 216.2 MB、接收端 180.0 MB 来自不同事实：Ktor `send` 只完成本机无界 outgoing channel 入队，
+旧实现却立刻增加发送进度；接收端则在实际写盘后增加进度，36.2 MiB 差值对应约 72 个仍在队列中的 512 KiB 帧。
+文件会话现在每 4 MiB 插入一个 Ed25519 签名检查点，接收端只有在此前有序帧全部写入且累计值吻合时才签名回应，
+发送端只发布这个确认值。客户端 outgoing 与服务端 incoming 文件队列限制为 2 帧，背压可以传回源文件读取。
+
+接收端不再复制 Ktor binary frame，文件写入与 SHA-256 转移到 IO dispatcher，并以每个 session 的 Mutex 保序；
+全局传输锁只管理 session map，所以三文件并行不会被单个文件写盘重新串行。9 个传输专项测试通过，新增 10 MiB
+回环用例覆盖中间进度不超前、4 MiB 最大窗口差、双方最终值与文件内容一致；完整 JVM、桌面和 Android Debug APK
+构建通过，未安装 Android 应用。真实 Wi-Fi 吞吐仍取决于频段、信号、VPN 和接收目录存储，需在同一设备组合复测。
+证据见 [`verification/2026-09-07-file-progress-throughput.md`](./verification/2026-09-07-file-progress-throughput.md)。
+
+VPN 共存失败并不是数据库或在线 StateFlow 的问题，而是两段网络路径不一致：UDP Socket 虽然按网卡加入组播，
+后续 Ktor WebSocket 探测仍会遵循 VPN 改写后的默认路由。发现层现在拒绝 point-to-point、虚拟及常见隧道网卡；
+Android 在发现会话开始前保存原进程网络并绑定 IPv4 Wi-Fi，停止时恢复，绑定/恢复失败时安全退回默认网络。
+网卡规则单测、完整 JVM 回归、桌面编译和 Android Debug APK 构建通过，未安装 Android 应用。VPN kill switch、
+lockdown 和显式禁止局域网访问仍属于系统策略，必须由用户在 VPN 客户端放行；真实双设备 VPN 互通尚待实机验证。
+证据见 [`verification/2026-09-07-vpn-lan-discovery.md`](./verification/2026-09-07-vpn-lan-discovery.md)。
+
 文字消息正文现在由 Compose 官方 `SelectionContainer` 承载：Android 长按后使用系统选择工具栏复制，桌面端可用
 鼠标拖选并通过 Ctrl+C 或 Cmd+C 复制。选择容器仅包裹 `message.body`，已读/未读/失败重试状态和文件卡片不进入
 选区，也没有引入自定义剪贴板或平台分支。共享 JVM 测试、桌面编译和 Android Debug APK 构建通过，未安装
@@ -263,8 +317,9 @@ Android 使用 SharedPreferences、桌面使用 Preferences，传输层在每个
 设备发现已从 Android NSD / 桌面 JmDNS 的“发现后再解析”改为共享 UDP 主动公告。两端在启动后的
 100 ms、500 ms、2 s 发出公告，接收端使用报文源 IP 与声明端口进行 Ktor WebSocket PING；只有收到身份路由
 匹配的 PONG 才通过 `DiscoveryEvent.Found` 写入 SQLDelight 为 ONLINE。启动时还会立即并发探测数据库中的已知
-地址，已确认设备每 5 s 探测一次，连续 3 次失败后写入 OFFLINE。PING 两端只读取轻量 `DeviceProfile`，没有
-把密码学身份生成重新放回启动路径。
+地址，已确认设备每 5 s 探测一次；连续 3 次失败后写入 OFFLINE，但保留端点并按 5、10、20、30 秒封顶退避
+继续单播探测，恢复后不需要等待新组播。PING 两端只读取轻量 `DeviceProfile`，没有把密码学身份生成重新放回
+启动路径。
 
 设备列表仍由 SQLDelight `Flow` 驱动，`SubnetDropViewModel.toUiState` 使用 `stateIn` 转成只读 `StateFlow`，
 Compose 没有直接读取网络层的临时状态。JVM 回归、Android 编译和桌面编译通过；按用户约束没有安装 Android

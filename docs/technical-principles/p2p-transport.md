@@ -47,7 +47,7 @@ data class TransportFrame(
 |---|---|
 | 配对 | `PAIR_REQUEST`, `PAIR_RESPONSE` |
 | 聊天 | `CHAT_MESSAGE`, `DELIVERY_ACK`, `READ_RECEIPT` |
-| 文件 | `FILE_OFFER`, `FILE_DECISION`, `FILE_STREAM_START`, `FILE_STREAM_COMPLETE`, `FILE_CANCEL` |
+| 文件 | `FILE_OFFER`, `FILE_DECISION`, `FILE_STREAM_START`, `FILE_STREAM_PROGRESS`, `FILE_STREAM_COMPLETE`, `FILE_CANCEL` |
 | 连接控制 | `ERROR`, `PING`, `PONG` |
 
 接收端先检查版本、帧大小、标识符、收件人和允许的状态转换，再解析类型负载。业务数据不能仅因为来源 IP 与已知

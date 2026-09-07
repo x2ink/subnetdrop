@@ -32,9 +32,18 @@ and 2 seconds. The announcement contains only the protocol version, device ID, d
 a reply is requested. A receiver replies once by UDP unicast and probes the announced `/chat` endpoint with `PING/PONG`.
 The peer becomes `ONLINE` only after that WebSocket probe succeeds; an announcement alone is never proof of reachability.
 
-Previously stored endpoints are probed concurrently at startup instead of waiting for multicast. Confirmed peers are probed
-every 5 seconds and become `OFFLINE` after three consecutive failures. Discovery and probing run outside the UI thread and
-must not prepare HPKE or Ed25519 identity. IP addresses are never treated as stable identity.
+Point-to-point and virtual tunnel interfaces are excluded from multicast membership. On Android, the local-only process
+is bound to the active Wi-Fi `Network` for the discovery session so multicast replies, reachability probes and later peer
+traffic do not follow a VPN default route. Stopping discovery clears only the binding created by SubnetDrop. VPN lockdown,
+kill-switch policies and VPN products that explicitly block local-network access remain outside the protocol guarantee.
+
+Previously stored endpoints are probed concurrently at startup instead of waiting for multicast. Stored and previously
+confirmed endpoints remain probe targets even while `OFFLINE`, using a 5/10/20/30-second capped retry backoff so a missed
+multicast announcement or a transient VPN/network switch cannot strand a reachable device offline. Three consecutive
+failures publish `OFFLINE` but do not discard the last confirmed endpoint; a later successful `PING/PONG` publishes
+`ONLINE` again. An unverified changed endpoint cannot degrade the health of the last confirmed endpoint when its probe
+fails. Discovery and probing run outside the UI thread and must not prepare HPKE or Ed25519 identity. IP addresses are
+never treated as stable identity.
 
 ### Pairing
 
@@ -106,6 +115,7 @@ Initial frame types:
 - `FILE_OFFER`
 - `FILE_DECISION`
 - `FILE_STREAM_START`
+- `FILE_STREAM_PROGRESS`
 - `FILE_STREAM_COMPLETE`
 - `FILE_CANCEL`
 - `ERROR`

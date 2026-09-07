@@ -22,6 +22,7 @@ enum class FrameType {
     FILE_OFFER,
     FILE_DECISION,
     FILE_STREAM_START,
+    FILE_STREAM_PROGRESS,
     FILE_STREAM_COMPLETE,
     FILE_CANCEL,
     ERROR,
@@ -64,6 +65,12 @@ data class FileDecisionPayload(
 @Serializable
 data class FileStreamStartPayload(
     val transferId: String,
+)
+
+@Serializable
+data class FileStreamProgressPayload(
+    val transferId: String,
+    val receivedBytes: Long,
 )
 
 @Serializable

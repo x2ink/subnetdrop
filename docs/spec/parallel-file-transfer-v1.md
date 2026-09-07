@@ -48,10 +48,11 @@ flowchart LR
     WA --> Receiver[Receiver StateFlow]
 ```
 
-The sender publishes bytes accepted by its WebSocket send path. The receiver publishes bytes written to its temporary
-file. These values may differ briefly because the network buffers data; the signed completion exchange and final length
-and SHA-256 validation make both terminal cards converge to `COMPLETED` and 100%. No per-chunk ACK is added because it
-would reduce throughput.
+Each upload uses a 4 MiB progress window. The sender inserts a signed checkpoint after the preceding ordered binary frames;
+the receiver responds with its actual written byte count only when it matches that checkpoint. Both cards publish the
+receiver-confirmed value, so local WebSocket queueing cannot make the sender run ahead. This is one acknowledgement per
+eight 512 KiB chunks rather than a per-chunk round trip. File-frame queues are bounded and every incoming session owns its
+I/O lock, so three transfers retain TCP backpressure without serializing their disk writes behind one global mutex.
 
 ## Failure semantics
 
@@ -67,4 +68,5 @@ would reduce throughput.
 2. Three confirmation-mode offers can be outstanding together, proving child transfers run concurrently.
 3. Accepting all offers transfers exact bytes and persists completed records on both peers.
 4. A failed child does not cancel successful siblings, and the batch reports partial failure.
-5. Both peers expose per-file `transferredBytes` and terminal 100% progress through the existing `StateFlow`.
+5. Both peers expose receiver-confirmed per-file `transferredBytes`; the sender never advances beyond the receiver and both
+   reach terminal 100% through the existing `StateFlow`.

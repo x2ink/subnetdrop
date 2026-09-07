@@ -32,17 +32,21 @@ sequenceDiagram
     B->>A: WebSocket PING
     A-->>B: PONG
     B->>B: Upsert peer as ONLINE
-    loop Every 5 seconds
+    loop Every 5 seconds while online
         B->>A: PING
         A-->>B: PONG or timeout
     end
-    B->>B: Three consecutive failures -> OFFLINE
+    B->>B: Three consecutive failures -> OFFLINE, retain endpoint
+    B->>A: Continue unicast probes with 5/10/20/30 s backoff
+    A-->>B: PONG -> ONLINE again
 ```
 
 应用启动时会立即并发探测数据库中保存的地址，不必等待组播；组播公告每 30 秒低频重复，以修复丢包和网络变化。
-离线只代表当前不可达，不删除历史和信任。再次确认同一 `deviceId` 时更新临时 `host`、`port`、名称和
-`lastSeenAt`。全 `/24` 网段扫描尚未启用，避免在无对端时无条件发起 255 个连接；后续只应作为组播失败时的
-显式兜底。
+数据库端点和曾经确认过的端点在离线后仍保留为单播探测目标，失败重试按 5、10、20、30 秒退避并封顶；新的
+UDP 公告仍会绕过退避立即探测。离线只代表当前不可达，不删除端点、历史或信任；因此首次启动竞态、VPN 切换或
+偶发组播丢包恢复后，不需要再次收到组播也能回到在线。再次确认同一 `deviceId` 时更新临时 `host`、`port`、
+名称和 `lastSeenAt`。未验证的新地址探测失败不会累计到最后确认地址的失败次数，防止伪造公告让真实端点掉线。
+全 `/24` 网段扫描尚未启用，避免在无对端时无条件发起 255 个连接；后续只应作为组播失败时的显式兜底。
 
 ## 平台实现
 
@@ -61,18 +65,25 @@ interface PeerDiscovery {
 
 | 平台 | 实现 | 特殊处理 |
 |---|---|---|
-| Android | 共享 `UdpPeerDiscovery` | 获取 Wi-Fi multicast lock，再按网卡绑定组播 Socket |
-| macOS / Windows | 共享 `UdpPeerDiscovery` | 按可用 IPv4 网卡绑定组播 Socket |
+| Android | 共享 `UdpPeerDiscovery` | 获取 multicast lock，排除 VPN 网卡，并在发现会话期间把进程绑定到 IPv4 Wi-Fi `Network` |
+| macOS / Windows | 共享 `UdpPeerDiscovery` | 排除 point-to-point、虚拟和常见隧道网卡，只在真实 IPv4 LAN 网卡绑定组播 Socket |
 
 候选设备通过 `PeerReachabilityProbe` 调用现有 Ktor 传输层。PONG 只证明该地址上的 SubnetDrop 实例当前可达，
 不建立信任；配对仍必须核对安全码。PING 路径只读取轻量设备资料，不触发密码学身份生成。
+
+Android 的绑定覆盖发现会话中新创建的 Socket，因此 UDP 回应、WebSocket 探测以及后续聊天/文件连接不会跟随
+VPN 默认路由。停止发现时恢复启动前的进程网络；没有可用 IPv4 Wi-Fi、系统拒绝绑定或绑定目标已经失效时，
+实现安全退回系统默认路由，不伪装成绑定成功。这里使用同步网络快照，是为了在打开第一个发现 Socket 前完成绑定，
+避免异步网络回调晚于启动流程。
 
 ## 数据流与 StateFlow
 
 ```mermaid
 flowchart LR
     UDP[UDP candidate] --> Probe[WebSocket PING/PONG]
+    DBEndpoint[(Known endpoint)] --> Probe
     Probe --> Event[Found / Lost event]
+    Event -->|OFFLINE retains endpoint| DBEndpoint
     Event --> Runtime[SubnetDropRuntime]
     Runtime --> DB[(SQLDelight peerEntity)]
     DB --> Flow[SQLDelight Flow]
@@ -92,12 +103,14 @@ SubnetDrop 没有照搬文件投递语义：它复用已有 `/chat` WebSocket �
 
 ## 网络边界
 
-UDP 组播通常不能跨越路由器广播域、访客网络隔离或企业 VLAN。以下情况并非协议 bug：
+UDP 组播通常不能跨越路由器广播域、访客网络隔离或企业 VLAN。普通 VPN 仅修改默认路由时，SubnetDrop 会继续
+使用真实局域网接口；两台设备不需要连接同一个 VPN 出口。但应用不能越过操作系统或 VPN 产品明确设置的封锁，
+以下情况仍需调整网络设置：
 
 - Wi-Fi 开启 AP/client isolation；
-- VPN 或安全软件拦截本地多播；
+- VPN 开启 kill switch、lockdown 或“禁止访问本地网络”；此时应在 VPN 设置中启用“允许局域网访问”；
 - 操作系统防火墙拒绝 UDP `45893` 或 TCP `45892`；
-- 多网卡选择了不可达地址；
+- 桌面系统路由或安全软件强制所有 Socket 进入隧道；
 - 设备休眠或应用停止服务发布。
 
 发现结果必须始终按不可信输入校验。攻击者可以伪造名称、ID、地址或版本，因此任何高价值操作都必须在
