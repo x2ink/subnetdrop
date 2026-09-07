@@ -64,7 +64,7 @@ private fun defaultAndroidSaveDirectory(context: Context): String = requireNotNu
 private fun defaultAndroidDeviceName(context: Context): String {
     val appName = context.applicationInfo.loadLabel(context.packageManager).toString()
     val model = Build.MODEL?.trim().orEmpty()
-    return if (model.isEmpty()) appName else "$appName · $model"
+    return model.ifEmpty { appName }
 }
 
 private const val FILE_SETTINGS_NAME = "file-transfer-settings"

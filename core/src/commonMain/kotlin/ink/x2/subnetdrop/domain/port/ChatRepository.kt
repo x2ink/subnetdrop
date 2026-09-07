@@ -2,6 +2,7 @@ package ink.x2.subnetdrop.domain.port
 
 import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
+import ink.x2.subnetdrop.domain.model.FileTransfer
 import ink.x2.subnetdrop.domain.model.Message
 import kotlinx.coroutines.flow.Flow
 
@@ -10,7 +11,11 @@ interface ChatRepository {
 
     fun observeMessages(conversationId: String): Flow<List<Message>>
 
+    fun observeFileMessages(conversationId: String): Flow<List<FileTransfer>>
+
     suspend fun saveMessage(message: Message)
+
+    suspend fun saveFileMessage(transfer: FileTransfer)
 
     suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus)
 

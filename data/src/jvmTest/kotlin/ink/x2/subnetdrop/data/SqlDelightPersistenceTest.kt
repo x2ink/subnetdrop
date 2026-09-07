@@ -3,6 +3,9 @@ package ink.x2.subnetdrop.data
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import ink.x2.subnetdrop.data.db.ChatDatabase
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
+import ink.x2.subnetdrop.domain.model.FileTransfer
+import ink.x2.subnetdrop.domain.model.FileTransferDirection
+import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.domain.model.Peer
@@ -20,24 +23,27 @@ class SqlDelightPersistenceTest {
     @Test
     fun persistsPeerIdentityAndMessagesAcrossDatabaseReopen() = runTest {
         val databasePath = Files.createTempDirectory("subnetdrop-test").resolve("chat.db")
-        val firstDriver = JdbcSqliteDriver("jdbc:sqlite:${databasePath.absolutePathString()}")
-        ChatDatabase.Schema.create(firstDriver)
+        val firstDriver = DesktopDatabaseDriverFactory(databasePath.toFile()).createDriver()
         val firstDatabase = ChatDatabase(firstDriver)
         seedDatabase(firstDatabase)
         firstDriver.close()
 
-        val secondDriver = JdbcSqliteDriver("jdbc:sqlite:${databasePath.absolutePathString()}")
+        val secondDriver = DesktopDatabaseDriverFactory(databasePath.toFile()).createDriver()
         try {
             val database = ChatDatabase(secondDriver)
             val peer = SqlDelightPeerRepository(database).findPeer(PEER_ID)
             val identity = SqlDelightTrustedIdentityRepository(database).find(PEER_ID)
             val chatRepository = SqlDelightChatRepository(database)
             val messages = chatRepository.observeMessages(CONVERSATION_ID).first()
+            val fileMessages = chatRepository.observeFileMessages(CONVERSATION_ID).first()
             val conversation = chatRepository.observeConversations().first().single()
 
             assertEquals(TrustState.TRUSTED, peer?.trustState)
             assertNotNull(identity)
             assertEquals(listOf("hello", "reply"), messages.map(Message::body))
+            assertEquals(listOf("transfer-1"), fileMessages.map(FileTransfer::id))
+            assertEquals("/downloads/document.pdf", fileMessages.single().localPath)
+            assertEquals(FileTransferStatus.COMPLETED, fileMessages.single().status)
             assertEquals(1L, conversation.unreadCount)
             chatRepository.markConversationRead(CONVERSATION_ID)
             chatRepository.markOutgoingMessagesRead(PEER_ID, listOf("message-1"))
@@ -52,7 +58,40 @@ class SqlDelightPersistenceTest {
         }
     }
 
+    @Test
+    fun migratesLegacyUnversionedDesktopDatabaseWithoutLosingMessages() = runTest {
+        val databasePath = Files.createTempDirectory("subnetdrop-legacy-test").resolve("chat.db")
+        val legacyDriver = JdbcSqliteDriver("jdbc:sqlite:${databasePath.absolutePathString()}")
+        ChatDatabase.Schema.create(legacyDriver)
+        legacyDriver.execute(null, "DROP INDEX fileMessageConversationCreatedAt", 0).value
+        legacyDriver.execute(null, "DROP TABLE fileMessageEntity", 0).value
+        legacyDriver.execute(null, "PRAGMA user_version = 0", 0).value
+        seedTextDatabase(ChatDatabase(legacyDriver))
+        legacyDriver.close()
+
+        val migratedDriver = DesktopDatabaseDriverFactory(databasePath.toFile()).createDriver()
+        try {
+            val repository = SqlDelightChatRepository(ChatDatabase(migratedDriver))
+            assertEquals(listOf("hello", "reply"), repository.observeMessages(CONVERSATION_ID).first().map(Message::body))
+
+            repository.saveFileMessage(completedFileTransfer())
+            assertEquals(
+                listOf("transfer-1"),
+                repository.observeFileMessages(CONVERSATION_ID).first().map(FileTransfer::id),
+            )
+        } finally {
+            migratedDriver.close()
+            Files.deleteIfExists(databasePath)
+            Files.deleteIfExists(databasePath.parent)
+        }
+    }
+
     private suspend fun seedDatabase(database: ChatDatabase) {
+        seedTextDatabase(database)
+        SqlDelightChatRepository(database).saveFileMessage(completedFileTransfer())
+    }
+
+    private suspend fun seedTextDatabase(database: ChatDatabase) {
         SqlDelightPeerRepository(database).upsertPeer(
             Peer(
                 id = PEER_ID,
@@ -98,6 +137,20 @@ class SqlDelightPersistenceTest {
             ),
         )
     }
+
+    private fun completedFileTransfer() = FileTransfer(
+        id = "transfer-1",
+        conversationId = CONVERSATION_ID,
+        peerId = PEER_ID,
+        fileName = "document.pdf",
+        size = 4_096L,
+        createdAt = 104L,
+        contentType = "application/pdf",
+        direction = FileTransferDirection.INCOMING,
+        status = FileTransferStatus.COMPLETED,
+        transferredBytes = 4_096L,
+        localPath = "/downloads/document.pdf",
+    )
 
     private companion object {
         const val LOCAL_ID = "local"

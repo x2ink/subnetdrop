@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Close
@@ -65,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import io.github.vinceglb.filekit.FileKit
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.dialogs.openFileWithDefaultApplication
+import io.github.vinceglb.filekit.exists
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
 import ink.x2.subnetdrop.domain.model.FileTransfer
 import ink.x2.subnetdrop.domain.model.FileTransferDirection
@@ -74,7 +74,10 @@ import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.presentation.ChatSelection
 import androidx.compose.ui.geometry.Size
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ChatScreen(
@@ -85,6 +88,7 @@ fun ChatScreen(
     onBack: () -> Unit,
     onSend: (String) -> Unit,
     onRetryMessage: (Message) -> Unit,
+    storedFileMessages: List<FileTransfer>,
     transfers: List<FileTransfer>,
     onSendFile: (LocalFile) -> Unit,
     onCancelFile: (String) -> Unit,
@@ -114,6 +118,7 @@ fun ChatScreen(
         ChatHeader(selection.peerDisplayName, showBack, onBack)
         ChatTimeline(
             messages = messages,
+            storedFileMessages = storedFileMessages,
             transfers = transfers,
             conversationId = selection.conversationId,
             peerId = selection.peerId,
@@ -168,7 +173,7 @@ private fun ChatHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = "端到端加密",
+                        text = "加密聊天",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -199,6 +204,7 @@ private fun PeerAvatar(title: String) {
 @Composable
 private fun ChatTimeline(
     messages: List<Message>,
+    storedFileMessages: List<FileTransfer>,
     transfers: List<FileTransfer>,
     conversationId: String,
     peerId: String,
@@ -208,8 +214,8 @@ private fun ChatTimeline(
     onCancelFile: (String) -> Unit,
     onOpenFile: (FileTransfer) -> Unit,
 ) {
-    val timelineItems = remember(messages, transfers, conversationId, peerId) {
-        buildChatTimeline(messages, transfers, conversationId, peerId)
+    val timelineItems = remember(messages, storedFileMessages, transfers, conversationId, peerId) {
+        buildChatTimeline(messages, storedFileMessages, transfers, conversationId, peerId)
     }
     val displayItems = remember(timelineItems) { timelineItems.asReversed() }
     LaunchedEffect(displayItems.firstOrNull()?.stableKey) {
@@ -326,12 +332,28 @@ private fun FileTransferMessage(
     onOpenFile: (FileTransfer) -> Unit,
 ) {
     val outgoing = transfer.direction == FileTransferDirection.OUTGOING
+    val coroutineScope = rememberCoroutineScope()
+    var localFileExists by remember(transfer.id, transfer.localPath, transfer.status) {
+        mutableStateOf<Boolean?>(null)
+    }
+    LaunchedEffect(transfer.id, transfer.localPath, transfer.status) {
+        localFileExists = transfer.localPath?.let { doesLocalFileExist(it) } ?: false
+    }
     val cancellable = transfer.status == FileTransferStatus.PREPARING ||
         transfer.status == FileTransferStatus.WAITING_FOR_ACCEPTANCE ||
         transfer.status == FileTransferStatus.TRANSFERRING
+    val expired = isFileMessageExpired(transfer, localFileExists)
     val canOpen = transfer.localPath != null &&
         (outgoing || transfer.status == FileTransferStatus.COMPLETED) &&
         transfer.status != FileTransferStatus.REJECTED && transfer.status != FileTransferStatus.CANCELLED
+    val openFile = {
+        coroutineScope.launch {
+            val exists = transfer.localPath?.let { doesLocalFileExist(it) } ?: false
+            localFileExists = exists
+            if (exists) onOpenFile(transfer)
+        }
+        Unit
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
@@ -339,7 +361,7 @@ private fun FileTransferMessage(
         Surface(
             modifier = Modifier
                 .widthIn(max = MAX_FILE_MESSAGE_WIDTH)
-                .then(if (canOpen) Modifier.clickable { onOpenFile(transfer) } else Modifier),
+                .then(if (canOpen) Modifier.clickable(onClick = openFile) else Modifier),
             shape = MessageBubbleShape(pointingLeft = !outgoing),
             color = if (outgoing) {
                 MaterialTheme.colorScheme.primaryContainer
@@ -385,9 +407,13 @@ private fun FileTransferMessage(
                 ) {
                     Text(transfer.fileName, maxLines = 2, fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = transfer.summary(),
+                        text = transfer.summary(expired),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (expired) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     )
                     if (cancellable) {
                         LinearProgressIndicator(
@@ -515,16 +541,33 @@ private fun FileTransferStatus.label(): String = when (this) {
     FileTransferStatus.FAILED -> "传输失败"
 }
 
-private fun FileTransfer.summary(): String = when (status) {
-    FileTransferStatus.PREPARING,
-    FileTransferStatus.WAITING_FOR_ACCEPTANCE,
-    FileTransferStatus.TRANSFERRING,
-    -> "${status.label()} · ${formatFileSize(transferredBytes)} / ${formatFileSize(size)}"
-    FileTransferStatus.COMPLETED,
-    FileTransferStatus.REJECTED,
-    FileTransferStatus.CANCELLED,
-    FileTransferStatus.FAILED,
-    -> "${status.label()} · ${formatFileSize(size)}"
+private fun FileTransfer.summary(expired: Boolean): String = if (expired) {
+    "已失效 · ${formatFileSize(size)}"
+} else {
+    when (status) {
+        FileTransferStatus.PREPARING,
+        FileTransferStatus.WAITING_FOR_ACCEPTANCE,
+        FileTransferStatus.TRANSFERRING,
+        -> "${status.label()} · ${formatFileSize(transferredBytes)} / ${formatFileSize(size)}"
+        FileTransferStatus.COMPLETED,
+        FileTransferStatus.REJECTED,
+        FileTransferStatus.CANCELLED,
+        FileTransferStatus.FAILED,
+        -> "${status.label()} · ${formatFileSize(size)}"
+    }
+}
+
+internal fun isFileMessageExpired(transfer: FileTransfer, localFileExists: Boolean?): Boolean =
+    transfer.status == FileTransferStatus.COMPLETED && localFileExists == false
+
+private suspend fun doesLocalFileExist(path: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        PlatformFile(path).exists()
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (_: Exception) {
+        false
+    }
 }
 
 internal sealed interface ChatTimelineItem {
@@ -544,6 +587,7 @@ internal sealed interface ChatTimelineItem {
 
 internal fun buildChatTimeline(
     messages: List<Message>,
+    storedFileMessages: List<FileTransfer>,
     transfers: List<FileTransfer>,
     conversationId: String,
     peerId: String,
@@ -551,7 +595,12 @@ internal fun buildChatTimeline(
     messages
         .filter { it.conversationId == conversationId }
         .forEach { add(ChatTimelineItem.TextMessage(it)) }
-    transfers.filter { it.peerId == peerId }.forEach { add(ChatTimelineItem.FileMessage(it)) }
+    val liveTransfers = transfers.filter { it.conversationId == conversationId && it.peerId == peerId }
+    val liveTransferIds = liveTransfers.mapTo(mutableSetOf(), FileTransfer::id)
+    storedFileMessages
+        .filter { it.conversationId == conversationId && it.peerId == peerId && it.id !in liveTransferIds }
+        .forEach { add(ChatTimelineItem.FileMessage(it)) }
+    liveTransfers.forEach { add(ChatTimelineItem.FileMessage(it)) }
 }.sortedWith(compareBy<ChatTimelineItem>(ChatTimelineItem::createdAt).thenBy(ChatTimelineItem::stableKey))
 
 class MessageBubbleShape(

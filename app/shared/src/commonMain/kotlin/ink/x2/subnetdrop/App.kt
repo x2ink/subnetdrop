@@ -112,6 +112,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onBack = viewModel::closeChat,
             onSend = viewModel::send,
             onRetryMessage = viewModel::retry,
+            storedFileMessages = ui.storedFileMessages,
             transfers = ui.fileTransfers,
             onSendFile = viewModel::sendFile,
             onCancelFile = viewModel::cancelFile,
@@ -157,6 +158,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onBack = { navigateHome(backStack, viewModel) },
                         onSend = viewModel::send,
                         onRetryMessage = viewModel::retry,
+                        storedFileMessages = latestUi.value.storedFileMessages,
                         transfers = latestUi.value.fileTransfers,
                         onSendFile = viewModel::sendFile,
                         onCancelFile = viewModel::cancelFile,
@@ -194,6 +196,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val section by viewModel.section.collectAsStateWithLifecycle()
     val incomingFileOffers by viewModel.incomingFileOffers.collectAsStateWithLifecycle()
+    val storedFileMessages by viewModel.storedFileMessages.collectAsStateWithLifecycle()
     val fileTransfers by viewModel.fileTransfers.collectAsStateWithLifecycle()
     val fileTransferSettings by viewModel.fileTransferSettings.collectAsStateWithLifecycle()
     return AppUiState(
@@ -207,6 +210,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
         notice = notice,
         section = section,
         incomingFileOffers = incomingFileOffers,
+        storedFileMessages = storedFileMessages,
         fileTransfers = fileTransfers,
         fileTransferSettings = fileTransferSettings,
     )

@@ -71,7 +71,7 @@ private fun desktopDataDirectory(): File {
 
 private fun defaultDesktopDeviceName(): String {
     val userName = System.getProperty("user.name")?.takeIf(String::isNotBlank)
-    return userName?.let { "SubnetDrop · $it" } ?: "SubnetDrop Desktop"
+    return userName ?: "SubnetDrop Desktop"
 }
 
 private fun desktopReceivedFilesDirectory(): File =

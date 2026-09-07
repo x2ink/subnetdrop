@@ -39,8 +39,25 @@ CREATE TABLE messageEntity (
     is_read INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
 );
 
+CREATE TABLE fileMessageEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversationEntity(id) ON DELETE CASCADE,
+    peer_id TEXT NOT NULL REFERENCES peerEntity(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    content_type TEXT,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL,
+    local_path TEXT,
+    error TEXT
+);
+
 CREATE INDEX messageConversationCreatedAt
 ON messageEntity(conversation_id, created_at);
+
+CREATE INDEX fileMessageConversationCreatedAt
+ON fileMessageEntity(conversation_id, created_at);
 
 selectDeviceProfile:
 SELECT device_id, display_name
@@ -159,6 +176,27 @@ SELECT id, conversation_id, sender_id, recipient_id, body, created_at, direction
 FROM messageEntity
 WHERE conversation_id = ?
 ORDER BY created_at, id;
+
+selectFileMessages:
+SELECT id, conversation_id, peer_id, file_name, size, created_at, content_type, direction, status, local_path, error
+FROM fileMessageEntity
+WHERE conversation_id = ?
+ORDER BY created_at, id;
+
+upsertFileMessage:
+INSERT OR REPLACE INTO fileMessageEntity(
+    id,
+    conversation_id,
+    peer_id,
+    file_name,
+    size,
+    created_at,
+    content_type,
+    direction,
+    status,
+    local_path,
+    error
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 selectConversationSummaries:
 SELECT

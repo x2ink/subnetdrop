@@ -22,6 +22,7 @@ data class AppUiState(
     val notice: UiNotice?,
     val section: HomeSection,
     val incomingFileOffers: List<IncomingFileOffer>,
+    val storedFileMessages: List<FileTransfer>,
     val fileTransfers: List<FileTransfer>,
     val fileTransferSettings: FileTransferSettings,
 )

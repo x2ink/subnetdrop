@@ -48,7 +48,9 @@ sequenceDiagram
 interface ChatRepository {
     fun observeConversations(): Flow<List<Conversation>>
     fun observeMessages(conversationId: String): Flow<List<Message>>
+    fun observeFileMessages(conversationId: String): Flow<List<FileTransfer>>
     suspend fun saveMessage(message: Message)
+    suspend fun saveFileMessage(transfer: FileTransfer)
     suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus)
     suspend fun markConversationRead(conversationId: String)
     suspend fun markOutgoingMessagesRead(peerId: String, messageIds: List<String>)
@@ -67,15 +69,17 @@ UI 和用例依赖接口，不直接拼 SQL。SQLDelight 适配器负责查询�
 | `trustedIdentityEntity` | 经确认的远端 HPKE/Ed25519 公钥和确认时间 |
 | `conversationEntity` | 一对一会话与最后更新时间 |
 | `messageEntity` | 正文、方向、送达状态和本地已读标记 |
+| `fileMessageEntity` | 文件元数据、收发方向、终态、本地路径和失败原因 |
 
 会话 ID 由双方设备 ID 确定，消息按 `createdAt` 与 ID 排序。打开会话会把 incoming 行标为已读并清除未读数；
 只有网络回执验证成功后，远端 outgoing 行才变成 `READ`。
 
 ## 存储边界
 
-- 身份、受信公钥、会话和消息跨进程重启保留。
+- 身份、受信公钥、会话、文字消息和终态文件消息跨进程重启保留。
 - 私钥不属于数据库 schema，由平台安全存储负责。
-- 文件传输卡和进度当前只存在应用会话内；成功接收的文件保留在磁盘。
+- 活跃文件进度只存在应用会话内；完成、拒绝、取消和失败的文件消息会保存到 SQLite。完成消息同时保存发送源路径
+  或接收最终路径，UI 使用 FileKit 判断文件是否仍存在；不存在时显示“已失效”，但不修改数据库中的传输终态。
 - `messageEntity.body` 当前是明文。未来静态加密需要定义本地数据密钥、密钥轮换、搜索/预览策略和 schema
   迁移，不能只在字段外临时包一层编码。
 - 修改 SQLDelight schema 时必须提供迁移并测试已有数据库升级，不能仅验证全新安装。

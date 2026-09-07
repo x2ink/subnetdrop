@@ -1,5 +1,15 @@
 # SubnetDrop 任务状态
 
+## 当前计划：文件消息持久化
+
+- [x] 定义文件消息数据库字段、终态持久化规则、活跃传输去重规则和本地文件失效语义。
+- [x] 新增 SQLDelight 文件消息表、查询与 v1→v2 迁移，并让 Android/桌面旧数据库自动执行迁移。
+- [x] 通过 ChatRepository/UseCase/StateFlow 向聊天页提供当前会话的历史文件消息。
+- [x] 在发送、接收、拒绝、取消或失败进入终态时保存文件消息，并保留本地最终路径。
+- [x] 合并历史文件消息与当前传输，同 ID 优先展示当前传输；文件不存在时显示“已失效”并禁止打开。
+- [x] 补充数据库重开/迁移、传输持久化、时间线去重与文件失效测试，运行完整 JVM/桌面和 Android 编译验证。
+- [x] 更新 README、架构、文件传输原理和验证记录，且不改变现有暂存区内容。
+
 ## 当前计划：首页导航与聊天返回稳定性
 
 - [x] 删除首页“聊天”Tab 及其只为会话列表服务的 presentation/UI 状态和回调。
@@ -132,6 +142,16 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+文件传输进入 `COMPLETED`、`REJECTED`、`CANCELLED` 或 `FAILED` 后，现在通过 `ChatRepository` 幂等写入
+`fileMessageEntity`，同时保存会话、对端、文件元数据、终态、本地路径和错误。聊天页观察当前会话的 SQLDelight
+文件消息 Flow，并与 `FileTransferService.transfers` 的实时进度合并；相同 transfer ID 优先实时项，所以落库瞬间不会
+产生重复卡片。完成文件会在组合和点击前通过 FileKit 检查路径，缺失时显示“已失效”，且不会调用系统打开器。
+
+新增 `1.sqm` 完成 v1→v2 迁移；桌面端还兼容此前因手动建库而 `user_version=0` 的旧数据库，按逻辑 v1 迁移并
+保留原有文字消息。SQLDelight schema/migration 一致性、旧库迁移、数据库重开、收发/拒绝终态落库、时间线去重和
+失效判定均有回归覆盖。完整 JVM/桌面回归、协议定向测试和 Android Debug APK 构建通过，未安装 Android 应用；
+证据见 [`verification/2026-09-07-persisted-file-messages.md`](./verification/2026-09-07-persisted-file-messages.md)。
 
 首页底部导航现在只包含“附近设备 / 设置”，会话列表 composable、`HomeSection.CHATS`、对应的 AppUiState 字段、
 ViewModel observer/callback 和 Koin 注入均已移除；SQLDelight 的会话表仍承担消息外键和更新时间职责，不因删除入口

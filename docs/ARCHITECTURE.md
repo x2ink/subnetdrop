@@ -26,6 +26,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 
 - [产品与通信协议 v1](spec/subnetdrop-v1.md)
 - [高速文件传输 v1](spec/file-transfer-v1.md)
+- [文件消息持久化 v1](spec/persisted-file-messages-v1.md)
 - [聊天时间线与输入布局 v1](spec/chat-timeline-ui-v1.md)
 - [渐进式媒体预览方案](design-docs/progressive-media-preview.md)
 

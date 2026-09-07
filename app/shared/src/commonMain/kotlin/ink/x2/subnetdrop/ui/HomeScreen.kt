@@ -344,15 +344,15 @@ private fun SettingsPanel(
         item { SettingValue(Icons.Outlined.Devices, "设备 ID", deviceId ?: "尚未就绪") }
         item {
             Text(
-                text = "安全与存储",
+                text = "设置",
                 modifier = Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        item { SettingValue(Icons.Outlined.Security, "端到端加密", "HPKE · X25519 · AES-256-GCM") }
-        item { SettingValue(Icons.Outlined.Security, "身份签名", "Ed25519") }
-        item { SettingValue(Icons.Outlined.Storage, "聊天记录", "仅保存在本机") }
+//        item { SettingValue(Icons.Outlined.Security, "端到端加密", "HPKE · X25519 · AES-256-GCM") }
+//        item { SettingValue(Icons.Outlined.Security, "身份签名", "Ed25519") }
+//        item { SettingValue(Icons.Outlined.Storage, "聊天记录", "仅保存在本机") }
         item {
             ToggleSetting(
                 icon = Icons.Outlined.Security,
@@ -452,7 +452,7 @@ private fun RuntimeState.label(): String = when (this) {
 private fun TrustState.label(): String = when (this) {
     TrustState.UNPAIRED -> "未配对 · 点击建立信任"
     TrustState.PENDING -> "等待确认"
-    TrustState.TRUSTED -> "已验证 · 端到端加密"
+    TrustState.TRUSTED -> "已验证"
     TrustState.KEY_CHANGED -> "安全密钥已变化，请重新核验"
 }
 

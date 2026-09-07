@@ -212,9 +212,11 @@ class SubnetDropTransport(
         validateFileName(file.name)
         require(source.length() == file.size) { "Selected file changed before transfer" }
         require(file.size in 0..MAX_FILE_SIZE_BYTES) { "File exceeds the allowed size" }
+        val conversationId = conversationIdFor(localIdentityService.getProfile().deviceId, peerId)
         val transferId = idGenerator.generate().also { validateIdentifier(it, "transfer ID") }
         val transfer = FileTransfer(
             id = transferId,
+            conversationId = conversationId,
             peerId = peerId,
             fileName = file.name,
             size = file.size,
@@ -535,6 +537,7 @@ class SubnetDropTransport(
             }
             mutableTransfers.value = mutableTransfers.value + FileTransfer(
                 id = offer.transferId,
+                conversationId = conversationIdFor(localIdentity.deviceId, frame.senderId),
                 peerId = frame.senderId,
                 fileName = offer.fileName,
                 size = offer.size,
@@ -918,17 +921,22 @@ class SubnetDropTransport(
     }
 
     private suspend fun updateTransfer(transferId: String, transform: (FileTransfer) -> FileTransfer) {
-        transferMutex.withLock {
+        val updatedTransfer = transferMutex.withLock {
             var found = false
+            var updated: FileTransfer? = null
             mutableTransfers.value = mutableTransfers.value.map { transfer ->
                 if (transfer.id == transferId) {
                     found = true
-                    transform(transfer)
+                    transform(transfer).also { updated = it }
                 } else {
                     transfer
                 }
             }
             require(found) { "Transfer does not exist" }
+            requireNotNull(updated)
+        }
+        if (!updatedTransfer.status.isActive()) {
+            chatRepository.saveFileMessage(updatedTransfer)
         }
     }
 

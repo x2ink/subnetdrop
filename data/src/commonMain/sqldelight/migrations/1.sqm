@@ -1,0 +1,16 @@
+CREATE TABLE fileMessageEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversationEntity(id) ON DELETE CASCADE,
+    peer_id TEXT NOT NULL REFERENCES peerEntity(id) ON DELETE CASCADE,
+    file_name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    content_type TEXT,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL,
+    local_path TEXT,
+    error TEXT
+);
+
+CREATE INDEX fileMessageConversationCreatedAt
+ON fileMessageEntity(conversation_id, created_at);

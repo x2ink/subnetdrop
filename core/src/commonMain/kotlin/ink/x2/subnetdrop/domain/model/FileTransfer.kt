@@ -18,6 +18,7 @@ data class IncomingFileOffer(
 
 data class FileTransfer(
     val id: String,
+    val conversationId: String,
     val peerId: String,
     val fileName: String,
     val size: Long,

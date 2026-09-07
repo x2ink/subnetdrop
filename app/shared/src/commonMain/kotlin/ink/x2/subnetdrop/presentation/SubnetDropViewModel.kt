@@ -13,6 +13,7 @@ import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PairingCandidate
 import ink.x2.subnetdrop.domain.port.PairingService
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
+import ink.x2.subnetdrop.domain.usecase.ObserveFileMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObserveMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObservePeersUseCase
 import ink.x2.subnetdrop.domain.usecase.SendMessageUseCase
@@ -36,6 +37,7 @@ class SubnetDropViewModel(
     private val runtime: SubnetDropRuntime,
     observePeers: ObservePeersUseCase,
     private val observeMessages: ObserveMessagesUseCase,
+    private val observeFileMessages: ObserveFileMessagesUseCase,
     private val sendMessage: SendMessageUseCase,
     private val markConversationRead: MarkConversationReadUseCase,
     private val pairingService: PairingService,
@@ -59,6 +61,11 @@ class SubnetDropViewModel(
     val messages = mutableSelection
         .flatMapLatest { selected ->
             selected?.let { observeMessages(it.conversationId) } ?: emptyFlow()
+        }
+        .toUiState(emptyList())
+    val storedFileMessages = mutableSelection
+        .flatMapLatest { selected ->
+            selected?.let { observeFileMessages(it.conversationId) } ?: emptyFlow()
         }
         .toUiState(emptyList())
 

@@ -3,10 +3,11 @@ package ink.x2.subnetdrop.network.transport
 import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
 import ink.x2.subnetdrop.domain.model.DeviceProfile
+import ink.x2.subnetdrop.domain.model.FileTransfer
+import ink.x2.subnetdrop.domain.model.FileTransferSettings
+import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
-import ink.x2.subnetdrop.domain.model.FileTransferStatus
-import ink.x2.subnetdrop.domain.model.FileTransferSettings
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.PeerAvailability
@@ -127,6 +128,9 @@ class SubnetDropTransportTest {
                 assertEquals("application/octet-stream", incoming.contentType)
                 assertEquals(File(customSaveDirectory, source.name).path, incoming.localPath)
                 assertContentEquals(sourceBytes, File(requireNotNull(incoming.localPath)).readBytes())
+                assertEquals(outgoing, alice.chatRepository.fileMessages.value.single())
+                assertEquals(incoming, bob.chatRepository.fileMessages.value.single())
+                assertEquals(conversationIdFor(alice.id, bob.id), incoming.conversationId)
             } finally {
                 alice.transport.stop()
                 bob.transport.stop()
@@ -158,6 +162,8 @@ class SubnetDropTransportTest {
 
                 assertEquals(FileTransferStatus.REJECTED, alice.transport.transfers.value.single().status)
                 assertEquals(FileTransferStatus.REJECTED, bob.transport.transfers.value.single().status)
+                assertEquals(FileTransferStatus.REJECTED, alice.chatRepository.fileMessages.value.single().status)
+                assertEquals(FileTransferStatus.REJECTED, bob.chatRepository.fileMessages.value.single().status)
                 assertEquals(false, File(bob.workingDirectory, "received").exists())
             } finally {
                 alice.transport.stop()
@@ -332,13 +338,20 @@ private class TestTrustedIdentityRepository(
 
 private class TestChatRepository : ChatRepository {
     val messages = MutableStateFlow<List<Message>>(emptyList())
+    val fileMessages = MutableStateFlow<List<FileTransfer>>(emptyList())
 
     override fun observeConversations(): Flow<List<Conversation>> = MutableStateFlow(emptyList())
 
     override fun observeMessages(conversationId: String): Flow<List<Message>> = messages
 
+    override fun observeFileMessages(conversationId: String): Flow<List<FileTransfer>> = fileMessages
+
     override suspend fun saveMessage(message: Message) {
         if (messages.value.none { it.id == message.id }) messages.value += message
+    }
+
+    override suspend fun saveFileMessage(transfer: FileTransfer) {
+        fileMessages.value = fileMessages.value.filterNot { it.id == transfer.id } + transfer
     }
 
     override suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus) {

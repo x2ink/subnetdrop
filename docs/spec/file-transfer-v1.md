@@ -18,10 +18,12 @@ device identity and trust model.
   under a `SubnetDrop` folder.
 - A completed incoming file, or the sender's existing source file, can be opened with the operating system's default
   application from its file-message card.
-- Failed, rejected and cancelled transfers remain visible for the current app session with an explicit state.
+- Completed, failed, rejected and cancelled transfers are persisted as conversation history with an explicit state.
+- A completed file message stores its local source/destination path. If that path is missing, the card displays `已失效`
+  and does not invoke the operating-system opener.
 - File contents are streamed in bounded chunks and are never loaded into memory as one buffer.
-- Transfer cards and progress are not persisted across application restarts in v1; successfully received files remain
-  on disk.
+- Active progress is process-local. Terminal file-message cards are restored from SQLDelight after restart; successfully
+  received files remain on disk independently of their database metadata.
 
 ## Domain API
 
@@ -115,3 +117,5 @@ modification but does not hide the file from an observer on the same network.
 7. Android, macOS and Windows file selection, destination handling and cross-platform transfer are verified on their
    target systems before release.
 8. The confirmation preference and save directory survive application restart.
+9. Terminal file messages and local paths survive application restart; duplicate live/history IDs render once.
+10. Missing completed files display `已失效` and cannot invoke the operating-system opener.

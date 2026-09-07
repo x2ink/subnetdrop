@@ -2,6 +2,7 @@ package ink.x2.subnetdrop.domain.usecase
 
 import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
+import ink.x2.subnetdrop.domain.model.FileTransfer
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.port.ChatRepository
 import ink.x2.subnetdrop.domain.port.ChatTransport
@@ -39,7 +40,11 @@ private class ReadStateRepository(
 
     override fun observeMessages(conversationId: String): Flow<List<Message>> = flowOf(emptyList())
 
+    override fun observeFileMessages(conversationId: String): Flow<List<FileTransfer>> = flowOf(emptyList())
+
     override suspend fun saveMessage(message: Message) = Unit
+
+    override suspend fun saveFileMessage(transfer: FileTransfer) = Unit
 
     override suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus) = Unit
 

@@ -5,6 +5,9 @@ import app.cash.sqldelight.coroutines.mapToList
 import ink.x2.subnetdrop.data.db.ChatDatabase
 import ink.x2.subnetdrop.domain.model.Conversation
 import ink.x2.subnetdrop.domain.model.DeliveryStatus
+import ink.x2.subnetdrop.domain.model.FileTransfer
+import ink.x2.subnetdrop.domain.model.FileTransferDirection
+import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.domain.port.ChatRepository
@@ -23,6 +26,11 @@ class SqlDelightChatRepository(
 
     override fun observeMessages(conversationId: String): Flow<List<Message>> = queries
         .selectMessages(conversationId, ::mapMessage)
+        .asFlow()
+        .mapToList(Dispatchers.Default)
+
+    override fun observeFileMessages(conversationId: String): Flow<List<FileTransfer>> = queries
+        .selectFileMessages(conversationId, ::mapFileMessage)
         .asFlow()
         .mapToList(Dispatchers.Default)
 
@@ -50,6 +58,34 @@ class SqlDelightChatRepository(
                 created_at = message.createdAt,
                 direction = message.direction.name,
                 status = message.status.name,
+            )
+        }
+    }
+
+    override suspend fun saveFileMessage(transfer: FileTransfer) {
+        require(transfer.status.isTerminal()) { "Only terminal file transfers can be persisted" }
+        queries.transaction {
+            queries.insertConversation(
+                id = transfer.conversationId,
+                peer_id = transfer.peerId,
+                updated_at = transfer.createdAt,
+            )
+            queries.updateConversationTimestamp(
+                updated_at = transfer.createdAt,
+                id = transfer.conversationId,
+            )
+            queries.upsertFileMessage(
+                id = transfer.id,
+                conversation_id = transfer.conversationId,
+                peer_id = transfer.peerId,
+                file_name = transfer.fileName,
+                size = transfer.size,
+                created_at = transfer.createdAt,
+                content_type = transfer.contentType,
+                direction = transfer.direction.name,
+                status = transfer.status.name,
+                local_path = transfer.localPath,
+                error = transfer.error,
             )
         }
     }
@@ -110,4 +146,43 @@ class SqlDelightChatRepository(
         status = DeliveryStatus.valueOf(status),
         isRead = isRead,
     )
+
+    private fun mapFileMessage(
+        id: String,
+        conversationId: String,
+        peerId: String,
+        fileName: String,
+        size: Long,
+        createdAt: Long,
+        contentType: String?,
+        direction: String,
+        status: String,
+        localPath: String?,
+        error: String?,
+    ): FileTransfer = FileTransfer(
+        id = id,
+        conversationId = conversationId,
+        peerId = peerId,
+        fileName = fileName,
+        size = size,
+        createdAt = createdAt,
+        contentType = contentType,
+        direction = FileTransferDirection.valueOf(direction),
+        status = FileTransferStatus.valueOf(status),
+        transferredBytes = if (status == FileTransferStatus.COMPLETED.name) size else 0,
+        localPath = localPath,
+        error = error,
+    )
+
+    private fun FileTransferStatus.isTerminal(): Boolean = when (this) {
+        FileTransferStatus.COMPLETED,
+        FileTransferStatus.REJECTED,
+        FileTransferStatus.CANCELLED,
+        FileTransferStatus.FAILED,
+        -> true
+        FileTransferStatus.PREPARING,
+        FileTransferStatus.WAITING_FOR_ACCEPTANCE,
+        FileTransferStatus.TRANSFERRING,
+        -> false
+    }
 }
