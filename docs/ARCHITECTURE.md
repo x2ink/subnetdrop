@@ -171,7 +171,7 @@ interface TrustedIdentityRepository
 | 私钥保护 | Android Keystore 包装本地 keyset | java-keyring 对接 Keychain / Credential Manager |
 | 数据库驱动 | SQLDelight Android driver | SQLDelight SQLite JDBC driver |
 | 文件选择 | FileKit Android provider | FileKit 原生桌面对话框 |
-| 接收目录 | 默认应用专属 external Downloads/SubnetDrop；可选择 SAF 目录 | 默认 `~/Downloads/SubnetDrop`；可选择本地目录 |
+| 接收目录 | MediaStore 公共 Download/SubnetDrop；可选择 SAF 目录 | 默认 `~/Downloads/SubnetDrop`；可选择本地目录 |
 | 文件设置 | Multiplatform Settings + SharedPreferences | Multiplatform Settings + Preferences |
 | UI | Compose Android | Compose Desktop |
 

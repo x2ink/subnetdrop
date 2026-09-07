@@ -8,6 +8,7 @@ import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.ui.ChatTimelineItem
 import ink.x2.subnetdrop.ui.buildChatTimeline
+import ink.x2.subnetdrop.ui.displaySaveDirectory
 import ink.x2.subnetdrop.ui.isFileMessageExpired
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -60,6 +61,15 @@ class SharedCommonTest {
         assertFalse(isFileMessageExpired(completed, true))
         assertTrue(isFileMessageExpired(completed, false))
         assertFalse(isFileMessageExpired(completed.copy(status = FileTransferStatus.FAILED), false))
+    }
+
+    @Test
+    fun publicAndroidDownloadsMarkerHasReadableSettingsLabel() {
+        assertEquals(
+            "公共下载目录/Download/SubnetDrop",
+            displaySaveDirectory("mediastore://downloads/SubnetDrop"),
+        )
+        assertEquals("/chosen", displaySaveDirectory("/chosen"))
     }
 
     private fun message(

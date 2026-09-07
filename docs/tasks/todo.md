@@ -1,5 +1,20 @@
 # SubnetDrop 任务状态
 
+## 当前计划：MediaStore 完成校验
+
+- [x] 接收完成时显式校验协议累计字节数，错误信息包含期望值和实际值。
+- [x] Android MediaStore 使用文件描述符读取真实落盘大小，不依赖 pending 条目的元数据。
+- [x] 文件提供方无法报告大小时，使用写入计数、流关闭结果与 SHA-256 完成校验，避免错误失败。
+- [x] 补充存储目标测试并运行文件传输、完整 JVM、桌面和 Android 构建验证。
+
+## 当前计划：Android 公共下载目录
+
+- [x] 将 Android 默认接收位置设为公共 `Download/SubnetDrop`。
+- [x] 使用 MediaStore pending 条目接收文件，校验成功后公开，失败或取消时删除未完成条目。
+- [x] 保留用户通过 SAF 选择自定义目录的最终产品能力，不提供旧默认路径迁移。
+- [x] 让设置页显示可读的公共目录名称，完成文件继续通过系统应用打开。
+- [x] 补充存储目标测试，运行 JVM、桌面和 Android 构建，不安装 Android 应用。
+
 ## 当前计划：离线设备自动恢复
 
 - [x] 将已知设备端点与当前在线状态解耦，首次探测失败后仍保留单播重试目标。
@@ -189,6 +204,20 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+截图中的 `INVALID_REQUEST: Received file size does not match offer` 是 MediaStore pending 条目的元数据误判：
+FileKit 的 `size()` 查询 `OpenableColumns.SIZE`，部分 Android 内容提供方在文件发布前返回 `0`、`-1` 或尚未刷新的值。
+接收流程现在先检查协议累计字节数，再正常 flush/close 写入流并校验 SHA-256；Android 额外通过
+`ParcelFileDescriptor.statSize` 读取真实落盘长度，提供方报告未知长度时跳过这项可选检查。文件存储与传输专项测试、
+完整 JVM 回归、桌面编译和 Android Debug APK 构建通过，未安装 Android 应用。证据见
+[`verification/2026-09-07-mediastore-size-validation.md`](./verification/2026-09-07-mediastore-size-validation.md)。
+
+Android 默认接收目标已从 `getExternalFilesDir()` 下的应用私有目录改为 MediaStore 公共
+`Download/SubnetDrop`。传输创建 `IS_PENDING=1` 的下载项，仍沿用共享传输层的长度与 SHA-256 校验，成功后清除
+pending 状态，失败、取消或服务停止时删除条目；文件消息保存可跨重启使用的 `content://` URI，并继续交给 FileKit
+调用系统应用打开。不保留旧应用私有目录的迁移分支；开发期已有数据应直接清除。完整 JVM 回归、
+桌面编译和 Android Debug Kotlin 编译通过，未安装 Android 应用。验证记录见
+[`verification/2026-09-07-android-public-downloads.md`](./verification/2026-09-07-android-public-downloads.md)。
 
 本次桌面端找不到 Android 并非 Wi-Fi、组播或 VPN 路由本身不通：两端分别位于同一 `/23` 网段，桌面可以收到
 Android 的 UDP 公告，也能连通 Android 的 TCP `45892` 并收到 WebSocket PONG。运行时 JFR 显示 Android 每

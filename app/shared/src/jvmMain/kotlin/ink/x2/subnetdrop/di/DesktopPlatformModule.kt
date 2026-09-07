@@ -16,6 +16,8 @@ import ink.x2.subnetdrop.network.crypto.DesktopSecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.SecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.TinkSecureMessageCodec
 import ink.x2.subnetdrop.network.discovery.DesktopPeerDiscovery
+import ink.x2.subnetdrop.network.storage.FileKitIncomingFileStore
+import ink.x2.subnetdrop.network.storage.IncomingFileStore
 import ink.x2.subnetdrop.network.transport.SubnetDropTransport
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -35,6 +37,7 @@ val desktopPlatformModule = module {
     single<TimestampProvider> { TimestampProvider(System::currentTimeMillis) }
     single<IdGenerator> { IdGenerator { UUID.randomUUID().toString() } }
     single<PeerDiscovery> { DesktopPeerDiscovery(get(), get()) }
+    single<IncomingFileStore> { FileKitIncomingFileStore() }
     single {
         SubnetDropTransport(
             localIdentityService = get(),
@@ -45,6 +48,7 @@ val desktopPlatformModule = module {
             timestampProvider = get(),
             idGenerator = get(),
             fileTransferSettingsRepository = get(),
+            incomingFileStore = get(),
         )
     }
     single<ChatTransport> { get<SubnetDropTransport>() }

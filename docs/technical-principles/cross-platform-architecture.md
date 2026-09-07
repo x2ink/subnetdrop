@@ -68,7 +68,7 @@ flowchart LR
 | 私钥 | `SecureKeyValueStore` | Android Keystore | java-keyring |
 | 文件选择、目录与打开 | FileKit common API | Android provider / SAF | FileKit native dialog / OS opener |
 | 文件设置 | `FileTransferSettingsRepository` | SharedPreferences | Preferences |
-| 文件目录 | `FileStorage` | app-specific external directory | user Downloads/SubnetDrop |
+| 文件目录 | `IncomingFileStore` | MediaStore public Download/SubnetDrop | user Downloads/SubnetDrop |
 | 生命周期 | `SubnetDropRuntime` | ProcessLifecycleOwner | Compose application/window |
 
 ## 架构约束

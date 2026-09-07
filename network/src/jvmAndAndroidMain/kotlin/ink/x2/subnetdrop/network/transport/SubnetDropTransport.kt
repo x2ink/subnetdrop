@@ -37,15 +37,8 @@ import ink.x2.subnetdrop.network.protocol.FrameType
 import ink.x2.subnetdrop.network.protocol.PublicIdentityPayload
 import ink.x2.subnetdrop.network.protocol.ReadReceiptPayload
 import ink.x2.subnetdrop.network.protocol.TransportFrame
-import io.github.vinceglb.filekit.PlatformFile
-import io.github.vinceglb.filekit.atomicMove
-import io.github.vinceglb.filekit.createDirectories
-import io.github.vinceglb.filekit.delete
-import io.github.vinceglb.filekit.exists
-import io.github.vinceglb.filekit.isDirectory
-import io.github.vinceglb.filekit.path
-import io.github.vinceglb.filekit.sink
-import io.github.vinceglb.filekit.size
+import ink.x2.subnetdrop.network.storage.IncomingFileStore
+import ink.x2.subnetdrop.network.storage.IncomingFileTarget
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO as ClientCio
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
@@ -81,7 +74,6 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.io.Buffer
-import kotlinx.io.RawSink
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -98,6 +90,7 @@ class SubnetDropTransport(
     private val timestampProvider: TimestampProvider,
     private val idGenerator: IdGenerator,
     private val fileTransferSettingsRepository: FileTransferSettingsRepository,
+    private val incomingFileStore: IncomingFileStore,
     override val listenerPort: Int = DEFAULT_PORT,
 ) : ChatTransport, PairingService, FileTransferService, PeerReachabilityProbe {
     private val mutableEvents = MutableSharedFlow<TransportEvent>(extraBufferCapacity = EVENT_BUFFER_SIZE)
@@ -889,7 +882,7 @@ class SubnetDropTransport(
             require(bytes.isNotEmpty() && bytes.size <= FILE_CHUNK_SIZE_BYTES) { "File chunk has invalid size" }
             val session = incomingSessions[transferId] ?: error("Transfer session was not accepted")
             require(session.peerId == peerId) { "Transfer peer mismatch" }
-            require(session.tempFile != null) { "Transfer session was not accepted" }
+            require(session.target != null) { "Transfer session was not accepted" }
             require(transferId !in cancelledTransfers) { "Transfer was cancelled" }
             session.ioMutex
         }
@@ -907,7 +900,7 @@ class SubnetDropTransport(
             if (!reachesEnd) require(bytes.size == FILE_CHUNK_SIZE_BYTES) { "Non-final file chunk has invalid size" }
             withContext(Dispatchers.IO) {
                 val buffer = Buffer().apply { write(bytes) }
-                requireNotNull(session.outputSink) { "Transfer output sink is not open" }
+                requireNotNull(session.target).outputSink
                     .write(buffer, bytes.size.toLong())
                 session.digest.update(bytes)
             }
@@ -937,32 +930,37 @@ class SubnetDropTransport(
         val session = transferMutex.withLock {
             requireNotNull(incomingSessions.remove(transferId)) { "Transfer session does not exist" }
         }
-        val tempFile = requireNotNull(session.tempFile)
-        val finalFile = requireNotNull(session.finalFile)
+        val target = requireNotNull(session.target)
         try {
             session.ioMutex.withLock {
                 withContext(Dispatchers.IO) {
-                    requireNotNull(session.outputSink) { "Transfer output sink is not open" }.run {
+                    target.outputSink.run {
                         flush()
                         close()
                     }
-                    require(tempFile.size() == session.size) { "Received file size does not match offer" }
+                    require(session.receivedBytes == session.size) {
+                        "Received byte count ${session.receivedBytes} does not match offered size ${session.size}"
+                    }
+                    target.persistedSizeOrNull()?.let { persistedSize ->
+                        require(persistedSize == session.size) {
+                            "Stored file size $persistedSize does not match offered size ${session.size}"
+                        }
+                    }
                     require(session.digest.digest().toHex() == expectedSha256) {
                         "Received file checksum does not match sender"
                     }
-                    require(!finalFile.exists()) { "Destination file appeared during transfer" }
-                    tempFile.atomicMove(finalFile)
+                    target.publish()
                 }
             }
             updateTransfer(transferId) {
                 it.copy(
                     status = FileTransferStatus.COMPLETED,
                     transferredBytes = it.size,
-                    localPath = finalFile.path,
+                    localPath = target.finalPath,
                 )
             }
         } catch (exception: Exception) {
-            tempFile.delete(mustExist = false)
+            target.discard()
             updateTransfer(transferId) {
                 it.copy(status = FileTransferStatus.FAILED, error = exception.message ?: "File validation failed")
             }
@@ -972,51 +970,35 @@ class SubnetDropTransport(
 
     private suspend fun prepareIncomingTransfer(offer: IncomingFileOffer) {
         val session = createIncomingSession(offer)
-        transferMutex.withLock { incomingSessions[offer.transferId] = session }
         updateTransfer(offer.transferId) {
             it.copy(
                 status = FileTransferStatus.TRANSFERRING,
-                localPath = requireNotNull(session.tempFile).path,
+                localPath = requireNotNull(session.target).temporaryPath,
             )
         }
     }
 
     private suspend fun createIncomingSession(offer: IncomingFileOffer): IncomingSession {
-        val receivedFilesDirectory = PlatformFile(fileTransferSettingsRepository.settings.value.saveDirectory)
-        receivedFilesDirectory.createDirectories()
-        require(receivedFilesDirectory.isDirectory()) { "Unable to create received-files directory" }
-        return transferMutex.withLock {
-            val pending = requireNotNull(incomingSessions[offer.transferId]) { "Transfer offer does not exist" }
-            val destination = uniqueDestinationFile(receivedFilesDirectory, offer.fileName)
-            val partialDirectory = PlatformFile(receivedFilesDirectory, PARTIAL_DIRECTORY_NAME)
-            partialDirectory.createDirectories()
-            val tempFile = PlatformFile(partialDirectory, "${offer.transferId}-${offer.fileName}")
-            require(!tempFile.exists()) { "Temporary file already exists" }
-            try {
-                pending.copy(
-                    tempFile = tempFile,
-                    finalFile = destination,
-                    outputSink = tempFile.sink(),
-                )
-            } catch (exception: Exception) {
-                tempFile.delete(mustExist = false)
-                throw exception
-            }
+        val (pending, reservedFinalPaths) = transferMutex.withLock {
+            val current = requireNotNull(incomingSessions[offer.transferId]) { "Transfer offer does not exist" }
+            current to incomingSessions.values.mapNotNull { it.target?.finalPath }.toSet()
         }
-    }
-
-    private fun uniqueDestinationFile(directory: PlatformFile, fileName: String): PlatformFile {
-        val direct = PlatformFile(directory, fileName)
-        val reservedPaths = incomingSessions.values.mapNotNull { it.finalFile?.path }.toSet()
-        if (!direct.exists() && direct.path !in reservedPaths) return direct
-        val extensionIndex = fileName.lastIndexOf('.').takeIf { it > 0 } ?: fileName.length
-        val base = fileName.substring(0, extensionIndex)
-        val extension = fileName.substring(extensionIndex)
-        var suffix = 1
-        while (true) {
-            val candidate = PlatformFile(directory, "$base ($suffix)$extension")
-            if (!candidate.exists() && candidate.path !in reservedPaths) return candidate
-            suffix += 1
+        val target = incomingFileStore.create(
+            saveDirectory = fileTransferSettingsRepository.settings.value.saveDirectory,
+            transferId = offer.transferId,
+            fileName = offer.fileName,
+            contentType = pending.contentType,
+            reservedFinalPaths = reservedFinalPaths,
+        )
+        return try {
+            transferMutex.withLock {
+                val current = requireNotNull(incomingSessions[offer.transferId]) { "Transfer offer no longer exists" }
+                require(current.target == null) { "Transfer session was already accepted" }
+                current.copy(target = target).also { incomingSessions[offer.transferId] = it }
+            }
+        } catch (exception: Exception) {
+            target.discard()
+            throw exception
         }
     }
 
@@ -1036,12 +1018,7 @@ class SubnetDropTransport(
     private suspend fun discardIncomingSession(transferId: String) {
         val session = transferMutex.withLock { incomingSessions.remove(transferId) }
         session?.ioMutex?.withLock {
-            withContext(Dispatchers.IO) {
-                session.outputSink?.close()
-                session.tempFile?.let { temporaryFile ->
-                    temporaryFile.delete(mustExist = false)
-                }
-            }
+            session.target?.discard()
         }
     }
 
@@ -1061,12 +1038,7 @@ class SubnetDropTransport(
         }
         sessions.forEach { session ->
             session.ioMutex.withLock {
-                withContext(Dispatchers.IO) {
-                    session.outputSink?.close()
-                    session.tempFile?.let { temporaryFile ->
-                        temporaryFile.delete(mustExist = false)
-                    }
-                }
+                session.target?.discard()
             }
         }
     }
@@ -1300,11 +1272,10 @@ class SubnetDropTransport(
         val transferId: String,
         val peerId: String,
         val fileName: String,
+        val contentType: String?,
         val size: Long,
         val digest: MessageDigest,
-        val tempFile: PlatformFile? = null,
-        val finalFile: PlatformFile? = null,
-        val outputSink: RawSink? = null,
+        val target: IncomingFileTarget? = null,
         val receivedBytes: Long = 0,
         val ioMutex: Mutex = Mutex(),
     ) {
@@ -1313,6 +1284,7 @@ class SubnetDropTransport(
                 transferId = offer.transferId,
                 peerId = peerId,
                 fileName = offer.fileName,
+                contentType = offer.contentType,
                 size = offer.size,
                 digest = MessageDigest.getInstance("SHA-256"),
             )
@@ -1352,7 +1324,6 @@ class SubnetDropTransport(
         const val FILE_PROGRESS_TIMEOUT_MS = 60_000L
         const val REACHABILITY_TIMEOUT_MS = 1_500L
         const val FILE_OFFER_TIMEOUT_MS = 5 * 60 * 1_000L
-        const val PARTIAL_DIRECTORY_NAME = ".subnetdrop-partials"
         const val SHUTDOWN_GRACE_MS = 500L
         const val SHUTDOWN_TIMEOUT_MS = 2_000L
         val ID_REGEX = Regex("^[A-Za-z0-9._:-]{1,128}$")

@@ -21,6 +21,9 @@ device identity and trust model.
   sender and receiver enforce their own limits independently.
 - A completed incoming file, or the sender's existing source file, can be opened with the operating system's default
   application from its file-message card.
+- Android stores incoming files in the public `Download/SubnetDrop` MediaStore collection by default. An entry remains
+  pending and invisible to other applications until length and SHA-256 validation succeeds; cancellation or failure
+  deletes it. A user-selected SAF directory remains supported and takes precedence over the default.
 - Completed, failed, rejected and cancelled transfers are persisted as conversation history with an explicit state.
 - A completed file message stores its local source/destination path. If that path is missing, the card displays `已失效`
   and does not invoke the operating-system opener.
@@ -117,7 +120,8 @@ WebSocket queues are bounded so TCP backpressure reaches the source reader inste
 - Android, macOS and Windows use FileKit's Compose Multiplatform launchers and platform-native file/directory dialogs.
 - Android provider-backed selections are size-checked before FileKit copies them into app cache for the JVM transport.
 - Android retains access to a selected Storage Access Framework directory. Desktop stores the selected path directly.
-- Desktop initially uses `~/Downloads/SubnetDrop`; Android initially uses the app-specific external Downloads directory.
+- Desktop initially uses `~/Downloads/SubnetDrop`. Android uses MediaStore to publish completed files in the public
+  `Download/SubnetDrop` collection, so other applications can open them without access to the app-private directory.
 - A receiver-side file card is openable only after final length and SHA-256 validation publishes the completed file.
 - Bytes are streamed to disk while receiving, but v1 does not claim progressive media playback. Opening a growing file
   in an external application cannot guarantee blocking reads, range semantics, codec support, or a playable MP4 index.

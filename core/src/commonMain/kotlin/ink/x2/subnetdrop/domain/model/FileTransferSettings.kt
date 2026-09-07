@@ -12,6 +12,7 @@ data class FileTransferSettings(
     }
 
     companion object {
+        const val PUBLIC_DOWNLOADS_LOCATION = "mediastore://downloads/SubnetDrop"
         const val BYTES_PER_GIB = 1_024L * 1_024L * 1_024L
         const val DEFAULT_MAX_FILE_SIZE_BYTES = 10L * BYTES_PER_GIB
         const val MIN_CONFIGURABLE_MAX_FILE_SIZE_BYTES = BYTES_PER_GIB

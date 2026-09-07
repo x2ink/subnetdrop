@@ -433,7 +433,7 @@ private fun SettingsPanel(
             SettingValue(
                 icon = Icons.Outlined.FolderOpen,
                 label = "文件保存位置",
-                value = saveDirectory,
+                value = displaySaveDirectory(saveDirectory),
                 modifier = Modifier.clickable(onClick = launchDirectoryPicker),
                 trailingIcon = Icons.Outlined.ChevronRight,
             )

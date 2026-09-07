@@ -23,6 +23,7 @@ import ink.x2.subnetdrop.domain.port.TrustedIdentityRepository
 import ink.x2.subnetdrop.network.crypto.SecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.TinkSecureMessageCodec
 import ink.x2.subnetdrop.network.identity.LocalIdentityService
+import ink.x2.subnetdrop.network.storage.FileKitIncomingFileStore
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
@@ -435,6 +436,7 @@ private class TestNode(
         timestampProvider = { 1_000L },
         idGenerator = IdGenerator { "$id-transfer-${transferSequence++}" },
         fileTransferSettingsRepository = fileSettings,
+        incomingFileStore = FileKitIncomingFileStore(),
         listenerPort = port,
     )
 

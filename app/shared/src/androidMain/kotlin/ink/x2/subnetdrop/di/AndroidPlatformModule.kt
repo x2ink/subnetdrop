@@ -2,11 +2,11 @@ package ink.x2.subnetdrop.di
 
 import android.content.Context
 import android.os.Build
-import android.os.Environment
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import ink.x2.subnetdrop.data.AndroidDatabaseDriverFactory
 import ink.x2.subnetdrop.data.DatabaseDriverFactory
+import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.PUBLIC_DOWNLOADS_LOCATION
 import ink.x2.subnetdrop.domain.port.ChatTransport
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.domain.port.IdGenerator
@@ -19,6 +19,8 @@ import ink.x2.subnetdrop.network.crypto.AndroidSecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.SecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.TinkSecureMessageCodec
 import ink.x2.subnetdrop.network.discovery.AndroidPeerDiscovery
+import ink.x2.subnetdrop.network.storage.AndroidIncomingFileStore
+import ink.x2.subnetdrop.network.storage.IncomingFileStore
 import ink.x2.subnetdrop.network.transport.SubnetDropTransport
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.qualifier.named
@@ -37,6 +39,7 @@ val androidPlatformModule = module {
     single<TimestampProvider> { TimestampProvider(System::currentTimeMillis) }
     single<IdGenerator> { IdGenerator { UUID.randomUUID().toString() } }
     single<PeerDiscovery> { AndroidPeerDiscovery(androidContext(), get(), get()) }
+    single<IncomingFileStore> { AndroidIncomingFileStore(androidContext()) }
     single {
         SubnetDropTransport(
             localIdentityService = get(),
@@ -47,6 +50,7 @@ val androidPlatformModule = module {
             timestampProvider = get(),
             idGenerator = get(),
             fileTransferSettingsRepository = get(),
+            incomingFileStore = get(),
         )
     }
     single<ChatTransport> { get<SubnetDropTransport>() }
@@ -54,12 +58,8 @@ val androidPlatformModule = module {
     single<FileTransferService> { get<SubnetDropTransport>() }
     single<PairingService> { get<SubnetDropTransport>() }
     single(named(DEFAULT_DISPLAY_NAME_QUALIFIER)) { defaultAndroidDeviceName(androidContext()) }
-    single(named(DEFAULT_SAVE_DIRECTORY_QUALIFIER)) { defaultAndroidSaveDirectory(androidContext()) }
+    single(named(DEFAULT_SAVE_DIRECTORY_QUALIFIER)) { PUBLIC_DOWNLOADS_LOCATION }
 }
-
-private fun defaultAndroidSaveDirectory(context: Context): String = requireNotNull(
-    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-).resolve("SubnetDrop").path
 
 private fun defaultAndroidDeviceName(context: Context): String {
     val appName = context.applicationInfo.loadLabel(context.packageManager).toString()

@@ -15,6 +15,7 @@ import io.github.vinceglb.filekit.mimeType
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.path
 import io.github.vinceglb.filekit.size
+import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.PUBLIC_DOWNLOADS_LOCATION
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import kotlinx.coroutines.CancellationException
@@ -55,7 +56,9 @@ fun rememberSaveDirectoryPickerLauncher(
 ): () -> Unit {
     val scope = rememberCoroutineScope()
     val launcher = rememberDirectoryPickerLauncher(
-        directory = currentDirectory.takeIf(String::isNotBlank)?.let(::PlatformFile),
+        directory = currentDirectory
+            .takeIf { it.isNotBlank() && it != PUBLIC_DOWNLOADS_LOCATION }
+            ?.let(::PlatformFile),
         onError = { failure -> onError(failure.message ?: "无法打开目录选择器") },
         onResult = { selected ->
             selected ?: return@rememberDirectoryPickerLauncher
@@ -101,3 +104,6 @@ private suspend fun PlatformFile.copyProviderFileToCache(): PlatformFile {
 
 private const val CONTENT_URI_PREFIX = "content://"
 private const val OUTGOING_CACHE_DIRECTORY = "outgoing-files"
+
+internal fun displaySaveDirectory(saveDirectory: String): String =
+    if (saveDirectory == PUBLIC_DOWNLOADS_LOCATION) "公共下载目录/Download/SubnetDrop" else saveDirectory
