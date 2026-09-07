@@ -13,6 +13,8 @@ interface PeerDiscovery {
         knownPeers: List<Peer>,
     )
 
+    suspend fun refresh()
+
     suspend fun stop()
 }
 

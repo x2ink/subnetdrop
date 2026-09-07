@@ -38,6 +38,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [UDP 设备发现与在线状态验证](tasks/verification/2026-09-05-udp-discovery.md)
 - [VPN 与局域网发现共存验证](tasks/verification/2026-09-07-vpn-lan-discovery.md)
 - [离线设备自动恢复验证](tasks/verification/2026-09-07-offline-peer-recovery.md)
+- [首页手动刷新附近设备验证](tasks/verification/2026-09-07-manual-discovery-refresh.md)
 - [文件进度同步与吞吐优化验证](tasks/verification/2026-09-07-file-progress-throughput.md)
 - [聊天时间线与 Android IME 验证](tasks/verification/2026-09-05-chat-timeline-ime.md)
 - [首页导航与聊天返回验证](tasks/verification/2026-09-05-home-navigation-chat-return.md)

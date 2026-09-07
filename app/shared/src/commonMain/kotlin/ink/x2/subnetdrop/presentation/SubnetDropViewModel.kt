@@ -131,6 +131,11 @@ class SubnetDropViewModel(
         runtime.start()
     }
 
+    fun refreshPeers() = launchAction("刷新附近设备失败") {
+        runtime.refreshDiscovery()
+        mutableNotice.value = UiNotice("已重新发起设备发现", isError = false)
+    }
+
     fun sendFiles(files: List<LocalFile>) {
         if (files.isEmpty()) return
         val selected = selection.value ?: return showError("请先选择联系人")

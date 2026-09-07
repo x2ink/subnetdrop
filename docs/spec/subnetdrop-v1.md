@@ -43,7 +43,9 @@ multicast announcement or a transient VPN/network switch cannot strand a reachab
 failures publish `OFFLINE` but do not discard the last confirmed endpoint; a later successful `PING/PONG` publishes
 `ONLINE` again. An unverified changed endpoint cannot degrade the health of the last confirmed endpoint when its probe
 fails. Discovery and probing run outside the UI thread and must not prepare HPKE or Ed25519 identity. IP addresses are
-never treated as stable identity.
+never treated as stable identity. Tapping the refresh action on the Nearby screen immediately sends one multicast
+announcement and probes every remembered endpoint without waiting for its heartbeat or offline-backoff deadline. Manual
+refresh does not restart the chat transport or clear peers, trust, or history.
 
 ### Pairing
 
@@ -165,3 +167,5 @@ Long-lived database, repository, discovery, identity, and connection-manager ins
 8. Automatic acceptance is the default. When confirmation is enabled, a receiver can reject an offered file without
    receiving file bytes; an accepted file is published only after length and SHA-256 verification.
 9. Android and desktop unit tests pass, and physical Android/macOS/Windows interoperability is recorded before release.
+10. The Nearby screen refresh action immediately announces the local device and probes remembered endpoints without
+    blocking navigation or resetting stored peer state.

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,17 +24,20 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -69,6 +73,7 @@ fun HomeScreen(
     modifier: Modifier,
     onSectionSelected: (HomeSection) -> Unit,
     onPeerSelected: (Peer) -> Unit,
+    onRefreshPeers: () -> Unit,
     onRetry: () -> Unit,
     onDisplayNameChanged: (String) -> Unit,
     onSaveDirectoryChanged: (String) -> Unit,
@@ -76,26 +81,39 @@ fun HomeScreen(
     onMaxFileSizeChanged: (Long) -> Unit,
     onSettingsError: (String) -> Unit,
 ) {
-    Column(modifier.fillMaxSize()) {
-        HomeHeader(state.localDisplayName)
-        RuntimeBanner(state.runtimeState, onRetry)
-        when (state.section) {
-            HomeSection.NEARBY -> PeerList(state.peers, Modifier.weight(1f), onPeerSelected)
-            HomeSection.SETTINGS -> SettingsPanel(
-                deviceId = state.localDeviceId,
-                displayName = state.localDisplayName,
-                modifier = Modifier.weight(1f),
-                onDisplayNameChanged = onDisplayNameChanged,
-                saveDirectory = state.fileTransferSettings.saveDirectory,
-                requireIncomingFileConfirmation = state.fileTransferSettings.requireIncomingConfirmation,
-                maxFileSizeBytes = state.fileTransferSettings.maxFileSizeBytes,
-                onSaveDirectoryChanged = onSaveDirectoryChanged,
-                onIncomingFileConfirmationChanged = onIncomingFileConfirmationChanged,
-                onMaxFileSizeChanged = onMaxFileSizeChanged,
-                onSettingsError = onSettingsError,
-            )
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = { SectionSelector(state.section, onSectionSelected) },
+        floatingActionButton = {
+            if (state.section == HomeSection.NEARBY) {
+                FloatingActionButton(onClick = onRefreshPeers, shape = RoundedCornerShape(999.dp)) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "刷新附近设备")
+                }
+            }
+        },
+    ) { contentPadding ->
+        Column(Modifier.fillMaxSize().padding(contentPadding)) {
+            HomeHeader(state.localDisplayName)
+            RuntimeBanner(state.runtimeState, onRetry)
+            when (state.section) {
+                HomeSection.NEARBY -> PeerList(state.peers, Modifier.weight(1f), onPeerSelected)
+                HomeSection.SETTINGS -> SettingsPanel(
+                    deviceId = state.localDeviceId,
+                    displayName = state.localDisplayName,
+                    modifier = Modifier.weight(1f),
+                    onDisplayNameChanged = onDisplayNameChanged,
+                    saveDirectory = state.fileTransferSettings.saveDirectory,
+                    requireIncomingFileConfirmation = state.fileTransferSettings.requireIncomingConfirmation,
+                    maxFileSizeBytes = state.fileTransferSettings.maxFileSizeBytes,
+                    onSaveDirectoryChanged = onSaveDirectoryChanged,
+                    onIncomingFileConfirmationChanged = onIncomingFileConfirmationChanged,
+                    onMaxFileSizeChanged = onMaxFileSizeChanged,
+                    onSettingsError = onSettingsError,
+                )
+            }
         }
-        SectionSelector(state.section, onSectionSelected)
     }
 }
 

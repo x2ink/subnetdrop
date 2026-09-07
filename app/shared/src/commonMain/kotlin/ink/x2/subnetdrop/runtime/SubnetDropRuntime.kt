@@ -70,6 +70,15 @@ class SubnetDropRuntime(
         }
     }
 
+    suspend fun refreshDiscovery() {
+        lifecycleMutex.withLock {
+            check(state.value is RuntimeState.Running || state.value is RuntimeState.Degraded) {
+                "局域网服务尚未就绪"
+            }
+            peerDiscovery.refresh()
+        }
+    }
+
     fun close() {
         scope.cancel()
     }

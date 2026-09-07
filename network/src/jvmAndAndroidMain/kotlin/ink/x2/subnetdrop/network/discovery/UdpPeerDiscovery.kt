@@ -106,6 +106,15 @@ internal class UdpPeerDiscovery(
         }
     }
 
+    override suspend fun refresh() {
+        lifecycleMutex.withLock {
+            check(sessionJob != null) { "局域网发现服务尚未启动" }
+            withContext(Dispatchers.IO) { sendAnnouncement() }
+            val peers = peerMutex.withLock { livenessTracker.allProbeTargets() }
+            peers.forEach(::scheduleProbe)
+        }
+    }
+
     private fun startSession(
         scope: CoroutineScope,
         openedSockets: List<MulticastSocket>,
@@ -342,6 +351,8 @@ internal class PeerLivenessTracker(
     fun probeTargets(timestamp: Long): List<Peer> = trackedPeers.values
         .filter { it.nextProbeAt <= timestamp }
         .map(PeerHealth::peer)
+
+    fun allProbeTargets(): List<Peer> = trackedPeers.values.map(PeerHealth::peer)
 
     fun clear() {
         trackedPeers.clear()

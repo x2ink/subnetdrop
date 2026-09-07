@@ -54,6 +54,10 @@ class AndroidPeerDiscovery(
         }
     }
 
+    override suspend fun refresh() {
+        delegate.refresh()
+    }
+
     private fun bindProcessToWifiIfAvailable() {
         if (processNetworkBinding != null) return
         processNetworkBinding = runCatching {

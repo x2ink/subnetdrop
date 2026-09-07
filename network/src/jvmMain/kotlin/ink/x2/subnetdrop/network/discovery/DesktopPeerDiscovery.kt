@@ -27,4 +27,8 @@ class DesktopPeerDiscovery(
     override suspend fun stop() {
         delegate.stop()
     }
+
+    override suspend fun refresh() {
+        delegate.refresh()
+    }
 }

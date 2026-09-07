@@ -134,6 +134,24 @@ class UdpPeerDiscoveryTest {
     }
 
     @Test
+    fun manualRefreshProbesKnownPeersWithoutWaitingForBackoff() {
+        val tracker = PeerLivenessTracker(
+            offlineFailureThreshold = 1,
+            onlineProbeIntervalMillis = 5_000L,
+            maxOfflineProbeIntervalMillis = 30_000L,
+        )
+        val peer = candidatePeer()
+        tracker.rememberKnown(listOf(peer))
+        tracker.record(peer, reachable = false, timestamp = 0L)
+
+        assertEquals(emptyList(), tracker.probeTargets(timestamp = 1L))
+        assertEquals(
+            listOf(peer.copy(availability = PeerAvailability.OFFLINE)),
+            tracker.allProbeTargets(),
+        )
+    }
+
+    @Test
     fun recoveryAndEndpointChangesRefreshDatabaseState() {
         val tracker = PeerLivenessTracker(offlineFailureThreshold = 3)
         val peer = candidatePeer()

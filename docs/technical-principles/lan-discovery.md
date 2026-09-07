@@ -39,6 +39,10 @@ sequenceDiagram
     B->>B: Three consecutive failures -> OFFLINE, retain endpoint
     B->>A: Continue unicast probes with 5/10/20/30 s backoff
     A-->>B: PONG -> ONLINE again
+    opt User taps refresh on B
+        B->>Udp: Immediate ANNOUNCE
+        B->>A: Immediate PING to every known endpoint
+    end
 ```
 
 应用启动时会立即并发探测数据库中保存的地址，不必等待组播；组播公告每 30 秒低频重复，以修复丢包和网络变化。
@@ -47,6 +51,10 @@ UDP 公告仍会绕过退避立即探测。离线只代表当前不可达，不�
 偶发组播丢包恢复后，不需要再次收到组播也能回到在线。再次确认同一 `deviceId` 时更新临时 `host`、`port`、
 名称和 `lastSeenAt`。未验证的新地址探测失败不会累计到最后确认地址的失败次数，防止伪造公告让真实端点掉线。
 全 `/24` 网段扫描尚未启用，避免在无对端时无条件发起 255 个连接；后续只应作为组播失败时的显式兜底。
+
+“附近设备”页右下角刷新按钮会立即发送一次组播公告，同时绕过心跳与离线退避时间，主动探测内存中保存的全部
+已知端点。它只触发一轮发现，不停止和重建 Socket、不重启聊天服务、不清空 SQLDelight 设备列表；已经进行中的
+同设备探测仍由 in-flight 集合去重，避免连续点击制造并发探测风暴。
 
 ## 平台实现
 
@@ -59,6 +67,7 @@ interface PeerDiscovery {
         servicePort: Int,
         knownPeers: List<Peer>,
     )
+    suspend fun refresh()
     suspend fun stop()
 }
 ```
