@@ -6,7 +6,6 @@
 - Persist a user-selected receive directory and use it for the next incoming transfer.
 - Open eligible file-message cards with the operating system's default application.
 - Make Android status and navigation bars transparent without installing the APK.
-- Record, but do not misrepresent as implemented, the separate progressive-media preview design.
 
 ## Automated verification
 
@@ -56,4 +55,3 @@ Result: no whitespace errors after the final documentation update.
 
 No APK was installed, per the current user constraint. Android SAF persistence, OEM system-bar appearance and default-app
 opening therefore remain physical-device checks. Windows native dialogs and file association also require a Windows run.
-Progressive media playback is intentionally not shipped in this change; only streaming receive-to-disk is implemented.

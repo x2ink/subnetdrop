@@ -123,8 +123,7 @@ WebSocket queues are bounded so TCP backpressure reaches the source reader inste
 - Desktop initially uses `~/Downloads/SubnetDrop`. Android uses MediaStore to publish completed files in the public
   `Download/SubnetDrop` collection, so other applications can open them without access to the app-private directory.
 - A receiver-side file card is openable only after final length and SHA-256 validation publishes the completed file.
-- Bytes are streamed to disk while receiving, but v1 does not claim progressive media playback. Opening a growing file
-  in an external application cannot guarantee blocking reads, range semantics, codec support, or a playable MP4 index.
+- Files that are still being received cannot be opened from the receiver-side message card.
 
 ## Acceptance criteria
 

@@ -1,5 +1,12 @@
 # SubnetDrop 任务状态
 
+## 当前计划：移除未采纳的媒体方案
+
+- [x] 确认代码与依赖中不存在播放器、媒体数据源或接收中打开入口。
+- [x] 删除未采纳的媒体预览设计文档及架构入口。
+- [x] 清理 README、规格、技术原理、任务、经验和验证记录中的未来方案表述。
+- [x] 保留普通文件分块落盘、完整性校验和完成后系统打开能力，并执行引用与差异检查。
+
 ## 当前计划：GitHub Actions 桌面测试包修复
 
 - [x] 将 macOS Intel、macOS Apple Silicon 与 Windows 从 Android job 解耦，分别输出可定位的打包日志。
@@ -128,7 +135,7 @@
 - [x] 新增持久化文件设置：默认自动接收，可选开启每次接收确认，并可选择保存目录。
 - [x] 调整文件协议：自动模式收到 offer 后直接准备写盘并开始传输，确认模式保留接受/拒绝流程。
 - [x] 使用 FileKit 的目录选择和跨平台默认应用打开能力，文件卡片可点击打开已完成文件。
-- [x] 保留接收中媒体的真实扩展名，明确系统打开不等于可靠渐进播放，并形成应用内预览设计。
+- [x] 保留 Android provider 文件的原始扩展名和 MIME 类型。
 - [x] 修正 Android edge-to-edge 系统栏样式，状态栏和导航栏透明并使用一致的内容背景。
 - [x] 补充设置、协议分支和文件路径测试，运行共享、数据、网络、Android 与桌面验证，不安装 APK。
 - [x] 更新规格、原理、README、经验与验证记录。
@@ -212,6 +219,12 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+未采纳的接收中媒体播放方案已从产品路线图与长期文档中移除，独立设计文档也已删除。代码和版本目录审计确认项目
+从未引入播放器、媒体数据源或接收中打开入口，因此本轮没有删除业务实现或依赖。接收方文件消息仍只在状态为
+`COMPLETED`、本地路径存在且长度与 SHA-256 校验成功后调用系统默认应用；发送方打开自己的源文件不属于接收中
+播放。文档引用、Markdown 本地链接与 `git diff --check` 均通过，详见
+[`verification/2026-09-07-media-plan-cleanup.md`](./verification/2026-09-07-media-plan-cleanup.md)。
 
 公开可见的历史 Actions run `33881533832` 中，Android 与 macOS Intel job 成功，实际失败的是 Windows MSI 和
 macOS Apple Silicon DMG；公开接口只保留退出码，无法恢复具体 Gradle 异常。当前工作流已将三个桌面目标从 Android
@@ -346,10 +359,8 @@ Android 使用 SharedPreferences、桌面使用 Preferences，传输层在每个
 接收中数据写入保留原扩展名的隐藏临时目录，通过长度和 SHA-256 校验后才发布。发送侧源文件和已完成接收文件
 可以从消息卡片调用系统默认应用打开，未校验完成的接收文件不会交给外部应用。
 
-当前“流式传输”是边收边写磁盘，并不宣称“边收边播”。外部播放器对增长中文件没有统一读取契约，MP4 索引也
-可能在文件尾部；可靠方案需要应用内播放器与可等待尚未到达字节的受控数据源，已记录在
-[`design-docs/progressive-media-preview.md`](../design-docs/progressive-media-preview.md)。Android 两个系统栏改为透明，
-并关闭 Android 10+ 三键导航强制对比色遮罩。数据、网络和共享 JVM 测试、Android Debug APK、桌面编译全部通过；
+Android 两个系统栏改为透明，并关闭 Android 10+ 三键导航强制对比色遮罩。数据、网络和共享 JVM 测试、Android
+Debug APK、桌面编译全部通过；
 按用户要求未安装 APK。证据见
 [`verification/2026-09-05-file-settings-system-bars.md`](./verification/2026-09-05-file-settings-system-bars.md)。
 
