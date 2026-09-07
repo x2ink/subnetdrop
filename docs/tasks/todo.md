@@ -1,5 +1,11 @@
 # SubnetDrop 任务状态
 
+## 当前计划：跨平台文字消息选择与复制
+
+- [x] 仅为文字消息正文启用 Compose 官方选择容器，不让送达状态和文件卡片进入选择范围。
+- [x] 验证 Android 长按选择/系统复制入口与桌面拖选、Ctrl/Cmd+C 所需代码可跨平台编译。
+- [x] 更新聊天 UI 规格、经验与验证记录，不安装 Android 应用。
+
 ## 当前计划：可配置单文件大小上限
 
 - [x] 将固定 10 GiB 上限建模为跨平台持久化设置，默认 10 GiB，可配置范围 1–1024 GiB。
@@ -160,6 +166,12 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+文字消息正文现在由 Compose 官方 `SelectionContainer` 承载：Android 长按后使用系统选择工具栏复制，桌面端可用
+鼠标拖选并通过 Ctrl+C 或 Cmd+C 复制。选择容器仅包裹 `message.body`，已读/未读/失败重试状态和文件卡片不进入
+选区，也没有引入自定义剪贴板或平台分支。共享 JVM 测试、桌面编译和 Android Debug APK 构建通过，未安装
+Android 应用；证据见
+[`verification/2026-09-07-message-text-selection.md`](./verification/2026-09-07-message-text-selection.md)。
 
 单文件大小上限现在是 `FileTransferSettings` 的持久化字段，默认 10 GiB，允许用户在设置页输入并保存
 1–1024 GiB 的整数值。Multiplatform Settings 在 Android 使用 SharedPreferences、桌面使用 Preferences，因此重启

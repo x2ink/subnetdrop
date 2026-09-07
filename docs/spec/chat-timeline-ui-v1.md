@@ -52,6 +52,10 @@ immediate instead of looking like the whole page is closing.
 The home bottom navigation contains only Nearby and Settings. Opening a trusted nearby device enters its one-to-one chat;
 there is no separate conversation-list tab or presentation observer for it.
 
+Text-message bodies use Compose's platform selection container. Android exposes long-press selection and the system copy
+action; desktop users can drag to select and use the platform copy shortcut. Delivery/read state and file cards remain
+outside the selection range.
+
 Clearing the current selection must not emit an empty text-message list while Navigation 3 may still retain the outgoing
 entry. The last list remains available until the entry is disposed, and the timeline filters text rows by conversation ID
 so a newly selected peer cannot briefly display another conversation.
@@ -71,3 +75,5 @@ so a newly selected peer cannot briefly display another conversation.
 9. Returning from compact chat to home has no closing/pop animation, file-only transient state, transparency or overlap.
 10. Opening or resizing the IME keeps the newest message immediately above the composer without overlap.
 11. The home bottom navigation exposes only Nearby and Settings.
+12. Android text messages support long-press selection/copy, while desktop text messages support pointer selection and
+    Ctrl/Cmd+C without selecting delivery state text.

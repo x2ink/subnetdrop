@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -276,15 +277,17 @@ private fun MessageBubble(message: Message, onRetryMessage: (Message) -> Unit) {
                     ),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    Text(
-                        text = message.body,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (outgoing) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = message.body,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (outgoing) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
                 }
             }
             if (outgoing) {
