@@ -51,8 +51,8 @@ messages from `DELIVERED` to `READ`. Conversation summaries expose an unread cou
 ### File transfer
 
 The sender validates one selected file and sends signed metadata. By default, a trusted receiver prepares its configured
-save directory and accepts automatically; users can enable per-file acceptance in Settings. Accepted content uses ordered
-plaintext 512 KiB binary frames over one WebSocket. Both sides calculate
+save directory and accepts automatically; users can enable per-file acceptance and configure a 1–1024 GiB per-file limit
+in Settings. Accepted content uses ordered plaintext 512 KiB binary frames over one WebSocket. Both sides calculate
 SHA-256 while streaming; the sender signs the final digest, and the receiver publishes the file only after byte-count and
 digest verification. Detailed limits are defined in
 [file-transfer-v1.md](file-transfer-v1.md).

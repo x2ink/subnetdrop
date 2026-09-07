@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.io.RandomAccessFile
 import java.net.ServerSocket
 import java.nio.file.Files
 import kotlin.test.Test
@@ -310,6 +311,43 @@ class SubnetDropTransportTest {
             }
         }
     }
+
+    @Test
+    fun enforcesSenderAndReceiverConfiguredFileSizeLimitsIndependently() {
+        runBlocking {
+            val alice = TestNode("alice-size-limit", availablePort())
+            val bob = TestNode("bob-size-limit", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                val oversized = File(alice.workingDirectory, "oversized.bin")
+                RandomAccessFile(oversized, "rw").use { file ->
+                    file.setLength(FileTransferSettings.BYTES_PER_GIB + 1L)
+                }
+                val selected = LocalFile(oversized.name, oversized.path, oversized.length())
+
+                alice.fileSettings.updateMaxFileSizeBytes(FileTransferSettings.BYTES_PER_GIB)
+                assertFailsWith<IllegalArgumentException> {
+                    alice.transport.sendFile(bob.id, selected)
+                }
+                assertTrue(bob.transport.transfers.value.isEmpty())
+
+                alice.fileSettings.updateMaxFileSizeBytes(2L * FileTransferSettings.BYTES_PER_GIB)
+                bob.fileSettings.updateMaxFileSizeBytes(FileTransferSettings.BYTES_PER_GIB)
+                assertFailsWith<Exception> {
+                    alice.transport.sendFile(bob.id, selected)
+                }
+                assertEquals(FileTransferStatus.FAILED, alice.transport.transfers.value.single().status)
+                assertTrue(bob.transport.transfers.value.isEmpty())
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
 }
 
 private class TestNode(
@@ -390,6 +428,10 @@ private class TestFileTransferSettingsRepository(defaultDirectory: String) : Fil
 
     override suspend fun updateRequireIncomingConfirmation(required: Boolean) {
         mutableSettings.value = mutableSettings.value.copy(requireIncomingConfirmation = required)
+    }
+
+    override suspend fun updateMaxFileSizeBytes(maxFileSizeBytes: Long) {
+        mutableSettings.value = mutableSettings.value.copy(maxFileSizeBytes = maxFileSizeBytes)
     }
 }
 

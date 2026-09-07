@@ -17,6 +17,8 @@ device identity and trust model.
 - Accepted files show live byte progress on both devices.
 - The receiver can choose a persistent save directory in Settings. The initial value is the platform download directory
   under a `SubnetDrop` folder.
+- The per-file size limit is persisted per device. It defaults to 10 GiB and can be configured from 1 to 1024 GiB;
+  sender and receiver enforce their own limits independently.
 - A completed incoming file, or the sender's existing source file, can be opened with the operating system's default
   application from its file-message card.
 - Completed, failed, rejected and cancelled transfers are persisted as conversation history with an explicit state.
@@ -44,6 +46,7 @@ interface FileTransferSettingsRepository {
     val settings: StateFlow<FileTransferSettings>
     suspend fun updateSaveDirectory(path: String)
     suspend fun updateRequireIncomingConfirmation(required: Boolean)
+    suspend fun updateMaxFileSizeBytes(maxFileSizeBytes: Long)
 }
 ```
 
@@ -86,7 +89,7 @@ modification but does not hide the file from an observer on the same network.
 
 - Trusted peers only.
 - One file per transfer session, up to 50 files per picker batch and three active outgoing sessions per process.
-- Maximum file size: 10 GiB.
+- Configurable per-device file size: 1–1024 GiB, default 10 GiB. The 1024 GiB ceiling is also the protocol hard limit.
 - Binary chunk size: 512 KiB.
 - Maximum file name length: 255 characters.
 - File names are reduced to a leaf name; path separators, blank names and control characters are rejected.
@@ -100,7 +103,7 @@ modification but does not hide the file from an observer on the same network.
 ## Platform behavior
 
 - Android, macOS and Windows use FileKit's Compose Multiplatform launchers and platform-native file/directory dialogs.
-- Android provider-backed selections are copied through FileKit into app cache before the JVM transport reads them.
+- Android provider-backed selections are size-checked before FileKit copies them into app cache for the JVM transport.
 - Android retains access to a selected Storage Access Framework directory. Desktop stores the selected path directly.
 - Desktop initially uses `~/Downloads/SubnetDrop`; Android initially uses the app-specific external Downloads directory.
 - A receiver-side file card is openable only after final length and SHA-256 validation publishes the completed file.
@@ -123,3 +126,5 @@ modification but does not hide the file from an observer on the same network.
 10. Missing completed files display `已失效` and cannot invoke the operating-system opener.
 11. A multi-file batch runs up to three independent transfers concurrently; one ordinary failure does not cancel siblings.
 12. Sender and receiver expose per-file byte progress and converge to 100% only after final validation and ACK.
+13. File-size settings survive restart; the sender blocks files over its local limit and the receiver rejects offers over
+    its own limit.

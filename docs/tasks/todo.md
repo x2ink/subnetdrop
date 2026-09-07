@@ -1,5 +1,13 @@
 # SubnetDrop 任务状态
 
+## 当前计划：可配置单文件大小上限
+
+- [x] 将固定 10 GiB 上限建模为跨平台持久化设置，默认 10 GiB，可配置范围 1–1024 GiB。
+- [x] 在设置页提供带单位和范围校验的数值输入，并通过 ViewModel/领域端口保存。
+- [x] 发送方使用本机上限预检，接收方使用本机上限校验 offer，保留 1 TiB 协议绝对上限。
+- [x] 补充设置默认值、持久化、非法值和收发双方独立上限测试。
+- [x] 更新文件协议与技术文档，运行 JVM/桌面及 Android 编译验证，不安装 Android 应用。
+
 ## 当前计划：多文件并行传输与双端进度
 
 - [x] 定义批量选择上限、全局并行度、单文件失败隔离和双端进度语义。
@@ -152,6 +160,16 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+单文件大小上限现在是 `FileTransferSettings` 的持久化字段，默认 10 GiB，允许用户在设置页输入并保存
+1–1024 GiB 的整数值。Multiplatform Settings 在 Android 使用 SharedPreferences、桌面使用 Preferences，因此重启
+后仍会恢复，并且不需要修改 SQLDelight schema。发送前按发送设备设置预检，收到 offer 时再按接收设备设置校验；
+接收方限制更小时会在内容流开始前拒绝，1 TiB 同时作为不可绕过的协议绝对上限。Android provider 文件会在复制到
+应用缓存前检查元数据大小，避免超限文件提前消耗本机存储。
+
+数据测试覆盖默认值、25 GiB 持久化及越界拒绝；网络测试使用稀疏文件验证发送端本地阻断与接收端独立拒绝，不读取
+超大文件内容。完整 JVM/桌面回归和 Android Debug APK 构建通过，没有安装 Android 应用；证据见
+[`verification/2026-09-07-configurable-file-size-limit.md`](./verification/2026-09-07-configurable-file-size-limit.md)。
 
 文件选择器现在使用 FileKit 的 `Multiple` 模式，一次最多选择 50 个文件。每个合法文件会立即创建独立的
 `PREPARING` 消息，进程级 Semaphore 将所有批次合计的活跃发送限制为 3 个；排队项保持可见，不会通过创建大量

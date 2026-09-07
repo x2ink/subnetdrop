@@ -56,8 +56,8 @@ flowchart LR
 - 桌面最小窗口为 `480 x 420`，默认 `1180 x 760`。
 - FileKit 从 common Compose UI 发起文件与目录选择、执行跨平台文件 I/O 和系统默认应用打开，避免维护
   Android Activity Result 与 AWT 两套业务接口。
-- Multiplatform Settings 以同一个领域仓库暴露持久化文件设置，Android 使用 SharedPreferences，桌面使用
-  Preferences。
+- Multiplatform Settings 以同一个领域仓库暴露接收确认、保存目录和单文件大小上限，Android 使用
+  SharedPreferences，桌面使用 Preferences。
 
 ## 平台能力表
 

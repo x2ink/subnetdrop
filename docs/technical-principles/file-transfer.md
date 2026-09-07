@@ -62,6 +62,7 @@ interface FileTransferSettingsRepository {
     val settings: StateFlow<FileTransferSettings>
     suspend fun updateSaveDirectory(path: String)
     suspend fun updateRequireIncomingConfirmation(required: Boolean)
+    suspend fun updateMaxFileSizeBytes(maxFileSizeBytes: Long)
 }
 ```
 
@@ -87,7 +88,7 @@ stateDiagram-v2
 |---|---|
 | 信任 | 只允许 `TRUSTED` peer |
 | 单次会话 | 1 个文件 |
-| 最大文件 | 10 GiB |
+| 最大文件 | 每台设备独立配置 1–1024 GiB，默认 10 GiB |
 | 明文分块 | 512 KiB 原始二进制帧 |
 | 文件名 | 最长 255 字符，只允许 leaf name，拒绝路径分隔符、控制字符和空名 |
 | 顺序 | 依赖单一 WebSocket 的有序传输，不允许超出声明总量 |
@@ -101,8 +102,10 @@ stateDiagram-v2
 ## 平台文件边界
 
 - Android 和桌面统一使用 FileKit 的 Compose Multiplatform launcher。
-- Android provider 返回的内容通过 FileKit 复制到应用 cache，再交给 JVM 共享传输实现读取。
-- 保存目录通过 Multiplatform Settings 持久化；Android 使用 SAF 目录并保留 URI 权限，桌面保存路径字符串。
+- Android provider 返回的内容先按当前上限检查元数据，再通过 FileKit 复制到应用 cache，避免超限文件在拒绝前占用
+  本机空间，最后交给 JVM 共享传输实现读取。
+- 保存目录与单文件大小上限通过 Multiplatform Settings 持久化；Android 使用 SAF 目录并保留 URI 权限，桌面保存
+  路径字符串。
 - Android 默认目录是应用专属 external Downloads/SubnetDrop，桌面默认目录是 `~/Downloads/SubnetDrop`。
 - 桌面同名目标不会被覆盖。
 - 接收完成并通过长度与 SHA-256 校验后，文件消息可调用系统默认应用打开；发送侧打开原始源文件。

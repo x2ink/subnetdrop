@@ -9,4 +9,6 @@ interface FileTransferSettingsRepository {
     suspend fun updateSaveDirectory(path: String)
 
     suspend fun updateRequireIncomingConfirmation(required: Boolean)
+
+    suspend fun updateMaxFileSizeBytes(maxFileSizeBytes: Long)
 }

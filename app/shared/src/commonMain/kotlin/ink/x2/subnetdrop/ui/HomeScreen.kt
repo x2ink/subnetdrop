@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -48,9 +49,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.x2.subnetdrop.AppUiState
+import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.BYTES_PER_GIB
+import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.MAX_CONFIGURABLE_MAX_FILE_SIZE_BYTES
+import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.MIN_CONFIGURABLE_MAX_FILE_SIZE_BYTES
 import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.PeerAvailability
 import ink.x2.subnetdrop.domain.model.TrustState
@@ -68,6 +73,7 @@ fun HomeScreen(
     onDisplayNameChanged: (String) -> Unit,
     onSaveDirectoryChanged: (String) -> Unit,
     onIncomingFileConfirmationChanged: (Boolean) -> Unit,
+    onMaxFileSizeChanged: (Long) -> Unit,
     onSettingsError: (String) -> Unit,
 ) {
     Column(modifier.fillMaxSize()) {
@@ -82,8 +88,10 @@ fun HomeScreen(
                 onDisplayNameChanged = onDisplayNameChanged,
                 saveDirectory = state.fileTransferSettings.saveDirectory,
                 requireIncomingFileConfirmation = state.fileTransferSettings.requireIncomingConfirmation,
+                maxFileSizeBytes = state.fileTransferSettings.maxFileSizeBytes,
                 onSaveDirectoryChanged = onSaveDirectoryChanged,
                 onIncomingFileConfirmationChanged = onIncomingFileConfirmationChanged,
+                onMaxFileSizeChanged = onMaxFileSizeChanged,
                 onSettingsError = onSettingsError,
             )
         }
@@ -304,11 +312,21 @@ private fun SettingsPanel(
     onDisplayNameChanged: (String) -> Unit,
     saveDirectory: String,
     requireIncomingFileConfirmation: Boolean,
+    maxFileSizeBytes: Long,
     onSaveDirectoryChanged: (String) -> Unit,
     onIncomingFileConfirmationChanged: (Boolean) -> Unit,
+    onMaxFileSizeChanged: (Long) -> Unit,
     onSettingsError: (String) -> Unit,
 ) {
     var draftName by remember(displayName) { mutableStateOf(displayName.orEmpty()) }
+    var draftMaxFileSizeGiB by remember(maxFileSizeBytes) {
+        mutableStateOf((maxFileSizeBytes / BYTES_PER_GIB).toString())
+    }
+    val minFileSizeGiB = MIN_CONFIGURABLE_MAX_FILE_SIZE_BYTES / BYTES_PER_GIB
+    val maxFileSizeGiB = MAX_CONFIGURABLE_MAX_FILE_SIZE_BYTES / BYTES_PER_GIB
+    val parsedMaxFileSizeGiB = draftMaxFileSizeGiB.toLongOrNull()
+    val isMaxFileSizeValid = parsedMaxFileSizeGiB != null &&
+        parsedMaxFileSizeGiB in minFileSizeGiB..maxFileSizeGiB
     val launchDirectoryPicker = rememberSaveDirectoryPickerLauncher(
         currentDirectory = saveDirectory,
         onDirectorySelected = onSaveDirectoryChanged,
@@ -365,6 +383,51 @@ private fun SettingsPanel(
                 checked = requireIncomingFileConfirmation,
                 onCheckedChange = onIncomingFileConfirmationChanged,
             )
+        }
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
+                    Icon(
+                        imageVector = Icons.Outlined.Storage,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                        Text("单文件大小上限", style = MaterialTheme.typography.labelMedium)
+                        OutlinedTextField(
+                            value = draftMaxFileSizeGiB,
+                            onValueChange = { value ->
+                                if (value.length <= MAX_FILE_SIZE_INPUT_LENGTH && value.all { it in '0'..'9' }) {
+                                    draftMaxFileSizeGiB = value
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            label = { Text("大小") },
+                            suffix = { Text("GiB") },
+                            supportingText = { Text("可设置 $minFileSizeGiB–$maxFileSizeGiB GiB") },
+                            isError = draftMaxFileSizeGiB.isNotEmpty() && !isMaxFileSizeValid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        Button(
+                            onClick = {
+                                parsedMaxFileSizeGiB?.let { onMaxFileSizeChanged(it * BYTES_PER_GIB) }
+                            },
+                            enabled = isMaxFileSizeValid &&
+                                parsedMaxFileSizeGiB * BYTES_PER_GIB != maxFileSizeBytes,
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) {
+                            Text("保存上限")
+                        }
+                    }
+                }
+            }
         }
         item {
             SettingValue(
@@ -435,6 +498,8 @@ private fun SettingValue(
         }
     }
 }
+
+private const val MAX_FILE_SIZE_INPUT_LENGTH = 4
 
 private fun RuntimeState.label(): String = when (this) {
     RuntimeState.Stopped -> "局域网服务未启动"

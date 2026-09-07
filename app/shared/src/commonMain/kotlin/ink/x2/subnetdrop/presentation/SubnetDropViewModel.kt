@@ -162,6 +162,11 @@ class SubnetDropViewModel(
         fileTransferSettingsRepository.updateRequireIncomingConfirmation(required)
     }
 
+    fun updateMaxFileSize(maxFileSizeBytes: Long) = launchAction("文件大小上限更新失败") {
+        fileTransferSettingsRepository.updateMaxFileSizeBytes(maxFileSizeBytes)
+        mutableNotice.value = UiNotice("单文件大小上限已更新", isError = false)
+    }
+
     fun reportFilePickerError(message: String) {
         showError(message)
     }

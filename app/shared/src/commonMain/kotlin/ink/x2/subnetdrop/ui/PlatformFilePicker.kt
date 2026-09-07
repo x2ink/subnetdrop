@@ -23,6 +23,7 @@ import kotlin.random.Random
 
 @Composable
 fun rememberFilePickerLauncher(
+    maxFileSizeBytes: Long,
     onFilesSelected: (List<LocalFile>) -> Unit,
     onError: (String) -> Unit,
 ): () -> Unit {
@@ -34,7 +35,7 @@ fun rememberFilePickerLauncher(
             selected ?: return@rememberFileKitPickerLauncher
             scope.launch {
                 try {
-                    onFilesSelected(selected.map { it.toTransferFile() })
+                    onFilesSelected(selected.map { it.toTransferFile(maxFileSizeBytes) })
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
@@ -71,12 +72,15 @@ fun rememberSaveDirectoryPickerLauncher(
     return launcher::launch
 }
 
-private suspend fun PlatformFile.toTransferFile(): LocalFile {
+private suspend fun PlatformFile.toTransferFile(maxFileSizeBytes: Long): LocalFile {
     val originalName = name
     val originalContentType = mimeType()?.toString()
+    val originalSize = size()
+    require(originalSize >= 0) { "无法确定所选文件大小" }
+    require(originalSize <= maxFileSizeBytes) { "所选文件超过本机设置的大小上限" }
     val transferSource = if (path.startsWith(CONTENT_URI_PREFIX)) copyProviderFileToCache() else this
     val fileSize = transferSource.size()
-    require(fileSize >= 0) { "无法确定所选文件大小" }
+    require(fileSize == originalSize) { "所选文件在准备传输时发生变化" }
     return LocalFile(
         name = originalName,
         path = transferSource.path,

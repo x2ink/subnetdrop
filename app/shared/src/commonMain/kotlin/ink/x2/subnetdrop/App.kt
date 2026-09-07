@@ -101,6 +101,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onDisplayNameChanged = viewModel::updateDisplayName,
             onSaveDirectoryChanged = viewModel::updateSaveDirectory,
             onIncomingFileConfirmationChanged = viewModel::updateIncomingFileConfirmation,
+            onMaxFileSizeChanged = viewModel::updateMaxFileSize,
             onSettingsError = viewModel::reportFilePickerError,
         )
         VerticalDivider(Modifier.width(1.dp))
@@ -114,6 +115,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onRetryMessage = viewModel::retry,
             storedFileMessages = ui.storedFileMessages,
             transfers = ui.fileTransfers,
+            maxFileSizeBytes = ui.fileTransferSettings.maxFileSizeBytes,
             onSendFiles = viewModel::sendFiles,
             onCancelFile = viewModel::cancelFile,
             onFilePickerError = viewModel::reportFilePickerError,
@@ -146,6 +148,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onDisplayNameChanged = viewModel::updateDisplayName,
                         onSaveDirectoryChanged = viewModel::updateSaveDirectory,
                         onIncomingFileConfirmationChanged = viewModel::updateIncomingFileConfirmation,
+                        onMaxFileSizeChanged = viewModel::updateMaxFileSize,
                         onSettingsError = viewModel::reportFilePickerError,
                     )
                 }
@@ -160,6 +163,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onRetryMessage = viewModel::retry,
                         storedFileMessages = latestUi.value.storedFileMessages,
                         transfers = latestUi.value.fileTransfers,
+                        maxFileSizeBytes = latestUi.value.fileTransferSettings.maxFileSizeBytes,
                         onSendFiles = viewModel::sendFiles,
                         onCancelFile = viewModel::cancelFile,
                         onFilePickerError = viewModel::reportFilePickerError,

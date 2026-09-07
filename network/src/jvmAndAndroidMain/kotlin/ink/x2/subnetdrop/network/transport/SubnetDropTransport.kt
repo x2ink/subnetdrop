@@ -217,7 +217,7 @@ class SubnetDropTransport(
         require(source.isFile) { "Selected file does not exist" }
         validateFileName(file.name)
         require(source.length() == file.size) { "Selected file changed before transfer" }
-        require(file.size in 0..MAX_FILE_SIZE_BYTES) { "File exceeds the allowed size" }
+        validateFileSize(file.size)
         val conversationId = conversationIdFor(localIdentityService.getProfile().deviceId, peerId)
         val transferId = idGenerator.generate().also { validateIdentifier(it, "transfer ID") }
         val transfer = FileTransfer(
@@ -549,7 +549,7 @@ class SubnetDropTransport(
         val offer = decodeSignedFilePayload<FileOfferPayload>(frame, senderIdentity)
         validateIdentifier(offer.transferId, "transfer ID")
         validateFileName(offer.fileName)
-        require(offer.size in 0..MAX_FILE_SIZE_BYTES) { "File exceeds the allowed size" }
+        validateFileSize(offer.size)
         val peer = requireNotNull(peerRepository.findPeer(frame.senderId)) { "Sender was not discovered" }
         val incomingOffer = IncomingFileOffer(
             transferId = offer.transferId,
@@ -774,6 +774,13 @@ class SubnetDropTransport(
 
     private suspend fun trustedSender(peerId: String): PublicIdentity =
         requireNotNull(trustedIdentityRepository.find(peerId)) { "Sender is not trusted" }
+
+    private fun validateFileSize(fileSizeBytes: Long) {
+        val configuredLimit = fileTransferSettingsRepository.settings.value.maxFileSizeBytes
+        require(fileSizeBytes in 0..configuredLimit) {
+            "File exceeds this device's configured maximum size"
+        }
+    }
 
     private suspend fun appendIncomingBytes(
         peerId: String,
@@ -1220,7 +1227,6 @@ class SubnetDropTransport(
         const val FILE_CHUNK_SIZE_BYTES = 512 * 1_024
         const val MAX_FILE_NAME_LENGTH = 255
         const val MIN_PRINTABLE_CHARACTER_CODE = 32
-        const val MAX_FILE_SIZE_BYTES = 10L * 1_024L * 1_024L * 1_024L
         const val EVENT_BUFFER_SIZE = 64
         const val EXCHANGE_TIMEOUT_MS = 10_000L
         const val REACHABILITY_TIMEOUT_MS = 1_500L

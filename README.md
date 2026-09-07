@@ -19,7 +19,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 - **加密文字聊天**：Google Tink HPKE 保护聊天正文，Ed25519 认证发送者和文件控制帧。
 - **可靠一对一聊天**：支持本地历史、幂等去重、失败重试、签名送达 ACK、未读计数和签名已读回执。
 - **消息式高速传文件**：单次可选择多个文件，最多 3 个并行传输；文件卡片与文字一起排列并持久化在聊天时间线中，
-  默认自动接收，也可开启逐文件确认，保存目录可配置。
+  默认自动接收，也可开启逐文件确认，保存目录和 1–1024 GiB 单文件上限可配置。
 - **系统文件体验**：接收完成后可从消息卡片调用系统默认应用打开，传输使用 512 KiB 原始二进制分块并做长度与 SHA-256 验证。
 - **失效状态可见**：重启后仍可查看文件消息；本地文件被移动或删除时，消息卡片明确显示“已失效”。
 - **共享跨平台 UI**：Compose Multiplatform Material 3 统一实现；首页只保留“附近设备 / 设置”，聊天从设备项直接进入，
@@ -53,7 +53,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 | 密码学 | Google Tink | 1.23.0 | HPKE 与 Ed25519，不自行实现密码算法 |
 | 局域网发现 | UDP multicast + Ktor probe | JDK / Ktor | 主动公告、单播响应、可达确认和心跳超时 |
 | 文件与目录 | FileKit | 0.15.0 | 原生文件/目录选择、跨平台文件 I/O 和系统默认应用打开 |
-| 跨平台设置 | Multiplatform Settings | 1.3.0 | 持久化接收确认策略和文件保存目录 |
+| 跨平台设置 | Multiplatform Settings | 1.3.0 | 持久化接收确认、保存目录和文件大小上限 |
 | 桌面凭据 | java-keyring | 1.0.4 | 对接 macOS Keychain / Windows Credential Manager |
 | 构建 | Gradle / Android Gradle Plugin | 9.1.0 / 9.0.1 | 多模块构建、Android 与桌面分发 |
 | 持续构建 | GitHub Actions | Hosted Runners | 生成 Android、Windows x64、macOS arm64/x64 测试包 |
