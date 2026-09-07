@@ -131,11 +131,13 @@ class SubnetDropViewModel(
         runtime.start()
     }
 
-    fun sendFile(file: LocalFile) {
+    fun sendFiles(files: List<LocalFile>) {
+        if (files.isEmpty()) return
         val selected = selection.value ?: return showError("请先选择联系人")
         launchAction("文件发送失败") {
-            fileTransferService.sendFile(selected.peerId, file)
-            mutableNotice.value = UiNotice("文件传输完成", isError = false)
+            mutableNotice.value = UiNotice("已开始并行发送 ${files.size} 个文件", isError = false)
+            fileTransferService.sendFiles(selected.peerId, files)
+            mutableNotice.value = UiNotice("${files.size} 个文件传输已结束", isError = false)
         }
     }
 

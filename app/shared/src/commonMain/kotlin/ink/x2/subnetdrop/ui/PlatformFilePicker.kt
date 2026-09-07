@@ -7,6 +7,7 @@ import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.cacheDir
 import io.github.vinceglb.filekit.copyTo
 import io.github.vinceglb.filekit.createDirectories
+import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher as rememberFileKitPickerLauncher
 import io.github.vinceglb.filekit.extension
@@ -15,23 +16,30 @@ import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.path
 import io.github.vinceglb.filekit.size
 import ink.x2.subnetdrop.domain.model.LocalFile
+import ink.x2.subnetdrop.domain.port.FileTransferService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 @Composable
 fun rememberFilePickerLauncher(
-    onFileSelected: (LocalFile) -> Unit,
+    onFilesSelected: (List<LocalFile>) -> Unit,
     onError: (String) -> Unit,
 ): () -> Unit {
     val scope = rememberCoroutineScope()
     val launcher = rememberFileKitPickerLauncher(
+        mode = FileKitMode.Multiple(maxItems = FileTransferService.MAX_FILES_PER_BATCH),
         onError = { failure -> onError(failure.message ?: "无法打开文件选择器") },
         onResult = { selected ->
             selected ?: return@rememberFileKitPickerLauncher
             scope.launch {
-                runCatching { selected.toTransferFile() }
-                    .onSuccess(onFileSelected)
-                    .onFailure { failure -> onError(failure.message ?: "无法读取所选文件") }
+                try {
+                    onFilesSelected(selected.map { it.toTransferFile() })
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    onError(exception.message ?: "无法读取所选文件")
+                }
             }
         },
     )

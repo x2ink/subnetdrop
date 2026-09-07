@@ -11,9 +11,16 @@ interface FileTransferService {
 
     suspend fun sendFile(peerId: String, file: LocalFile)
 
+    suspend fun sendFiles(peerId: String, files: List<LocalFile>)
+
     suspend fun acceptOffer(transferId: String)
 
     suspend fun rejectOffer(transferId: String)
 
     suspend fun cancelTransfer(transferId: String)
+
+    companion object {
+        const val MAX_FILES_PER_BATCH = 50
+        const val MAX_PARALLEL_OUTGOING_TRANSFERS = 3
+    }
 }

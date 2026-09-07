@@ -90,7 +90,7 @@ fun ChatScreen(
     onRetryMessage: (Message) -> Unit,
     storedFileMessages: List<FileTransfer>,
     transfers: List<FileTransfer>,
-    onSendFile: (LocalFile) -> Unit,
+    onSendFiles: (List<LocalFile>) -> Unit,
     onCancelFile: (String) -> Unit,
     onFilePickerError: (String) -> Unit,
 ) {
@@ -98,7 +98,7 @@ fun ChatScreen(
         EmptyChat(modifier)
         return
     }
-    val launchFilePicker = rememberFilePickerLauncher(onSendFile, onFilePickerError)
+    val launchFilePicker = rememberFilePickerLauncher(onSendFiles, onFilePickerError)
     val timelineListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val openFile = { transfer: FileTransfer ->

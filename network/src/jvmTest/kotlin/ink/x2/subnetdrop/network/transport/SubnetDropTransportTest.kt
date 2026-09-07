@@ -37,6 +37,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -204,6 +205,111 @@ class SubnetDropTransportTest {
             }
         }
     }
+
+    @Test
+    fun sendsMultipleFilesWithThreeConcurrentOffersAndProgressOnBothPeers() {
+        runBlocking {
+            val alice = TestNode("alice-batch", availablePort())
+            val bob = TestNode("bob-batch", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                bob.fileSettings.updateRequireIncomingConfirmation(true)
+                val sources = (1..5).map { index ->
+                    File(alice.workingDirectory, "batch-$index.bin").apply {
+                        writeBytes(ByteArray(600_000 + index) { offset -> (offset % 251).toByte() })
+                    }
+                }
+                val sending = async {
+                    alice.transport.sendFiles(
+                        bob.id,
+                        sources.map { LocalFile(it.name, it.path, it.length(), "application/octet-stream") },
+                    )
+                }
+
+                withTimeout(5_000L) {
+                    bob.transport.incomingOffers.first { it.size == 3 }
+                }
+                assertEquals(5, alice.transport.transfers.value.size)
+                assertEquals(3, bob.transport.transfers.value.size)
+                assertEquals(
+                    3,
+                    alice.transport.transfers.value.count {
+                        it.status == FileTransferStatus.WAITING_FOR_ACCEPTANCE
+                    },
+                )
+                assertTrue(
+                    bob.transport.transfers.value.all {
+                        it.status == FileTransferStatus.WAITING_FOR_ACCEPTANCE && it.transferredBytes == 0L
+                    },
+                )
+                val acceptedIds = mutableSetOf<String>()
+                while (acceptedIds.size < sources.size) {
+                    val offer = withTimeout(5_000L) {
+                        bob.transport.incomingOffers.first { offers ->
+                            offers.any { it.transferId !in acceptedIds }
+                        }.first { it.transferId !in acceptedIds }
+                    }
+                    acceptedIds += offer.transferId
+                    bob.transport.acceptOffer(offer.transferId)
+                }
+                sending.await()
+
+                val outgoing = alice.transport.transfers.value
+                val incoming = bob.transport.transfers.value
+                assertEquals(5, outgoing.size)
+                assertEquals(5, incoming.size)
+                assertTrue(outgoing.all { it.status == FileTransferStatus.COMPLETED && it.progress == 1f })
+                assertTrue(incoming.all { it.status == FileTransferStatus.COMPLETED && it.progress == 1f })
+                assertEquals(5, alice.chatRepository.fileMessages.value.size)
+                assertEquals(5, bob.chatRepository.fileMessages.value.size)
+                sources.forEach { source ->
+                    val receivedFile = File(bob.fileSettings.saveDirectory, source.name)
+                    assertContentEquals(source.readBytes(), receivedFile.readBytes())
+                }
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
+
+    @Test
+    fun batchFailureDoesNotCancelSuccessfulSibling() {
+        runBlocking {
+            val alice = TestNode("alice-partial-failure", availablePort())
+            val bob = TestNode("bob-partial-failure", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                val valid = File(alice.workingDirectory, "valid.txt").apply { writeText("still delivered") }
+                val missing = File(alice.workingDirectory, "missing.txt")
+
+                assertFailsWith<Exception> {
+                    alice.transport.sendFiles(
+                        bob.id,
+                        listOf(
+                            LocalFile(missing.name, missing.path, 0L),
+                            LocalFile(valid.name, valid.path, valid.length()),
+                        ),
+                    )
+                }
+
+                assertEquals(FileTransferStatus.COMPLETED, alice.transport.transfers.value.single().status)
+                assertEquals(FileTransferStatus.COMPLETED, bob.transport.transfers.value.single().status)
+                assertEquals("still delivered", File(bob.fileSettings.saveDirectory, valid.name).readText())
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
 }
 
 private class TestNode(
@@ -275,6 +381,8 @@ private class TestNode(
 private class TestFileTransferSettingsRepository(defaultDirectory: String) : FileTransferSettingsRepository {
     private val mutableSettings = MutableStateFlow(FileTransferSettings(defaultDirectory))
     override val settings: StateFlow<FileTransferSettings> = mutableSettings
+    val saveDirectory: String
+        get() = settings.value.saveDirectory
 
     override suspend fun updateSaveDirectory(path: String) {
         mutableSettings.value = mutableSettings.value.copy(saveDirectory = path)

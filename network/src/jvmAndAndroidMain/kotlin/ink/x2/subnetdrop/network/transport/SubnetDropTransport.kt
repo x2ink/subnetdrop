@@ -65,6 +65,8 @@ import io.ktor.websocket.send
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,7 +74,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.io.Buffer
@@ -100,6 +105,7 @@ class SubnetDropTransport(
     private val candidateMutex = Mutex()
     private val lifecycleMutex = Mutex()
     private val transferMutex = Mutex()
+    private val outgoingTransferSlots = Semaphore(FileTransferService.MAX_PARALLEL_OUTGOING_TRANSFERS)
     private val json = Json { ignoreUnknownKeys = false }
     private val client by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         HttpClient(ClientCio) {
@@ -227,49 +233,75 @@ class SubnetDropTransport(
             localPath = source.path,
         )
         setTransfer(transfer)
-        val decision = CompletableDeferred<Boolean>()
-        transferMutex.withLock { pendingDecisions[transferId] = decision }
         try {
-            updateTransfer(transferId) { it.copy(status = FileTransferStatus.WAITING_FOR_ACCEPTANCE) }
-            sendSignedFileRequest(
-                peerId = peerId,
-                type = FrameType.FILE_OFFER,
-                acknowledgementId = transferId,
-                payload = json.encodeToString(
-                    FileOfferPayload(
-                        transferId = transferId,
-                        fileName = file.name,
-                        size = file.size,
-                        contentType = file.contentType,
-                    ),
-                ),
-            )
-            val accepted = withTimeout(FILE_OFFER_TIMEOUT_MS) { decision.await() }
-            if (isTransferCancelled(transferId)) {
-                updateTransfer(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
-                return
-            }
-            if (!accepted) {
-                updateTransfer(transferId) { it.copy(status = FileTransferStatus.REJECTED) }
-                return
-            }
-            updateTransfer(transferId) { it.copy(status = FileTransferStatus.TRANSFERRING) }
-            uploadFile(peerId, transferId, source)
-            updateTransfer(transferId) {
-                it.copy(status = FileTransferStatus.COMPLETED, transferredBytes = it.size)
+            outgoingTransferSlots.withPermit {
+                val decision = CompletableDeferred<Boolean>()
+                transferMutex.withLock { pendingDecisions[transferId] = decision }
+                try {
+                    updateTransfer(transferId) { it.copy(status = FileTransferStatus.WAITING_FOR_ACCEPTANCE) }
+                    sendSignedFileRequest(
+                        peerId = peerId,
+                        type = FrameType.FILE_OFFER,
+                        acknowledgementId = transferId,
+                        payload = json.encodeToString(
+                            FileOfferPayload(
+                                transferId = transferId,
+                                fileName = file.name,
+                                size = file.size,
+                                contentType = file.contentType,
+                            ),
+                        ),
+                    )
+                    val accepted = withTimeout(FILE_OFFER_TIMEOUT_MS) { decision.await() }
+                    if (isTransferCancelled(transferId)) {
+                        updateTransfer(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
+                        return
+                    }
+                    if (!accepted) {
+                        updateTransfer(transferId) { it.copy(status = FileTransferStatus.REJECTED) }
+                        return
+                    }
+                    updateTransfer(transferId) { it.copy(status = FileTransferStatus.TRANSFERRING) }
+                    uploadFile(peerId, transferId, source)
+                    updateTransfer(transferId) {
+                        it.copy(status = FileTransferStatus.COMPLETED, transferredBytes = it.size)
+                    }
+                } finally {
+                    transferMutex.withLock { pendingDecisions.remove(transferId) }
+                }
             }
         } catch (exception: CancellationException) {
-            updateTransfer(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
+            updateTransferIfActive(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
             throw exception
         } catch (_: TransferCancelledException) {
-            updateTransfer(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
+            updateTransferIfActive(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
         } catch (exception: Exception) {
-            updateTransfer(transferId) {
+            updateTransferIfActive(transferId) {
                 it.copy(status = FileTransferStatus.FAILED, error = exception.message ?: "Transfer failed")
             }
             throw exception
-        } finally {
-            transferMutex.withLock { pendingDecisions.remove(transferId) }
+        }
+    }
+
+    override suspend fun sendFiles(peerId: String, files: List<LocalFile>) {
+        require(files.isNotEmpty()) { "At least one file is required" }
+        require(files.size <= FileTransferService.MAX_FILES_PER_BATCH) { "Too many files in one batch" }
+        val failures = supervisorScope {
+            files.map { file ->
+                async {
+                    try {
+                        sendFile(peerId, file)
+                        null
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        exception
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+        if (failures.isNotEmpty()) {
+            throw FileBatchTransferException(files.size, failures.size, failures.first())
         }
     }
 
@@ -940,6 +972,26 @@ class SubnetDropTransport(
         }
     }
 
+    private suspend fun updateTransferIfActive(
+        transferId: String,
+        transform: (FileTransfer) -> FileTransfer,
+    ) {
+        val updatedTransfer = transferMutex.withLock {
+            var updated: FileTransfer? = null
+            mutableTransfers.value = mutableTransfers.value.map { transfer ->
+                if (transfer.id == transferId && transfer.status.isActive()) {
+                    transform(transfer).also { updated = it }
+                } else {
+                    transfer
+                }
+            }
+            updated
+        }
+        if (updatedTransfer != null && !updatedTransfer.status.isActive()) {
+            chatRepository.saveFileMessage(updatedTransfer)
+        }
+    }
+
     private suspend fun findTransfer(transferId: String): FileTransfer = transferMutex.withLock {
         mutableTransfers.value.firstOrNull { it.id == transferId } ?: error("Transfer does not exist")
     }
@@ -1150,6 +1202,12 @@ class SubnetDropTransport(
     )
 
     private class TransferCancelledException : Exception()
+
+    private class FileBatchTransferException(
+        totalCount: Int,
+        failedCount: Int,
+        cause: Exception,
+    ) : Exception("$failedCount of $totalCount file transfers failed", cause)
 
     private companion object {
         const val DEFAULT_PORT = 45_892

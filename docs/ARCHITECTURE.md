@@ -27,6 +27,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [产品与通信协议 v1](spec/subnetdrop-v1.md)
 - [高速文件传输 v1](spec/file-transfer-v1.md)
 - [文件消息持久化 v1](spec/persisted-file-messages-v1.md)
+- [多文件并行传输 v1](spec/parallel-file-transfer-v1.md)
 - [聊天时间线与输入布局 v1](spec/chat-timeline-ui-v1.md)
 - [渐进式媒体预览方案](design-docs/progressive-media-preview.md)
 
@@ -108,10 +109,14 @@ sequenceDiagram
     A->>B: Signed FILE_OFFER
     B->>B: Apply automatic or confirmation policy
     B-->>A: Signed FILE_DECISION
-    A->>B: One accepted upload WebSocket
-    A->>B: Signed FILE_STREAM_START
-    loop Ordered 512 KiB chunks
-        A->>B: Plain binary frame
+    par Up to three independent file sessions
+        A->>B: Accepted upload WebSocket A
+        A->>B: Accepted upload WebSocket B
+        A->>B: Accepted upload WebSocket C
+    end
+    A->>B: Signed FILE_STREAM_START per file
+    loop Ordered 512 KiB chunks per session
+        A->>B: Plain binary frame; each peer updates local progress
     end
     A->>B: Signed FILE_STREAM_COMPLETE with SHA-256
     B-->>A: Signed DELIVERY_ACK

@@ -114,7 +114,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onRetryMessage = viewModel::retry,
             storedFileMessages = ui.storedFileMessages,
             transfers = ui.fileTransfers,
-            onSendFile = viewModel::sendFile,
+            onSendFiles = viewModel::sendFiles,
             onCancelFile = viewModel::cancelFile,
             onFilePickerError = viewModel::reportFilePickerError,
         )
@@ -160,7 +160,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onRetryMessage = viewModel::retry,
                         storedFileMessages = latestUi.value.storedFileMessages,
                         transfers = latestUi.value.fileTransfers,
-                        onSendFile = viewModel::sendFile,
+                        onSendFiles = viewModel::sendFiles,
                         onCancelFile = viewModel::cancelFile,
                         onFilePickerError = viewModel::reportFilePickerError,
                     )

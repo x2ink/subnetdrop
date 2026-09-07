@@ -8,7 +8,8 @@ device identity and trust model.
 
 ## Product behavior
 
-- A sender selects one local file from an open conversation.
+- A sender selects up to 50 local files from an open conversation. Every file is an independent transfer and message.
+- At most three outgoing transfers run concurrently across all batches; queued items remain visible as `PREPARING`.
 - Incoming offers are accepted automatically by default. The receiver can enable per-file confirmation in Settings;
   confirmation mode exposes accept and reject actions before any content bytes are sent.
 - Each transfer appears in the conversation timeline as a directional file-message card, interleaved with text by its
@@ -33,6 +34,7 @@ interface FileTransferService {
     val transfers: StateFlow<List<FileTransfer>>
 
     suspend fun sendFile(peerId: String, file: LocalFile)
+    suspend fun sendFiles(peerId: String, files: List<LocalFile>)
     suspend fun acceptOffer(transferId: String)
     suspend fun rejectOffer(transferId: String)
     suspend fun cancelTransfer(transferId: String)
@@ -83,7 +85,7 @@ modification but does not hide the file from an observer on the same network.
 ## Limits and validation
 
 - Trusted peers only.
-- One file per transfer session in v1.
+- One file per transfer session, up to 50 files per picker batch and three active outgoing sessions per process.
 - Maximum file size: 10 GiB.
 - Binary chunk size: 512 KiB.
 - Maximum file name length: 255 characters.
@@ -119,3 +121,5 @@ modification but does not hide the file from an observer on the same network.
 8. The confirmation preference and save directory survive application restart.
 9. Terminal file messages and local paths survive application restart; duplicate live/history IDs render once.
 10. Missing completed files display `已失效` and cannot invoke the operating-system opener.
+11. A multi-file batch runs up to three independent transfers concurrently; one ordinary failure does not cancel siblings.
+12. Sender and receiver expose per-file byte progress and converge to 100% only after final validation and ACK.
