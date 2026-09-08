@@ -1,5 +1,6 @@
 package ink.x2.subnetdrop.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
@@ -73,8 +75,8 @@ import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
+import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.presentation.ChatSelection
-import androidx.compose.ui.geometry.Size
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -103,6 +105,7 @@ fun ChatScreen(
     val launchFilePicker = rememberFilePickerLauncher(maxFileSizeBytes, onSendFiles, onFilePickerError)
     val timelineListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    var isFileDragActive by remember { mutableStateOf(false) }
     val openFile = { transfer: FileTransfer ->
         runCatching {
             FileKit.openFileWithDefaultApplication(PlatformFile(requireNotNull(transfer.localPath)))
@@ -111,36 +114,81 @@ fun ChatScreen(
         }
         Unit
     }
-    Column(
-        modifier
+    Box(
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .imePadding(),
+            .platformFileDropTarget(
+                maxFileSizeBytes = maxFileSizeBytes,
+                onFilesDropped = onSendFiles,
+                onError = onFilePickerError,
+                onDragActiveChanged = { isFileDragActive = it },
+            ),
     ) {
-        ChatHeader(selection.peerDisplayName, showBack, onBack)
-        ChatTimeline(
-            messages = messages,
-            storedFileMessages = storedFileMessages,
-            transfers = transfers,
-            conversationId = selection.conversationId,
-            peerId = selection.peerId,
-            modifier = Modifier.weight(1f),
-            listState = timelineListState,
-            onRetryMessage = onRetryMessage,
-            onCancelFile = onCancelFile,
-            onOpenFile = openFile,
-        )
-        Composer(
-            onSend = onSend,
-            onAttachFile = launchFilePicker,
-            onInputFocused = {
-                coroutineScope.launch {
-                    if (timelineListState.layoutInfo.totalItemsCount > 0) {
-                        timelineListState.scrollToItem(0)
+        Column(Modifier.fillMaxSize().imePadding()) {
+            ChatHeader(selection.peerDisplayName, showBack, onBack)
+            ChatTimeline(
+                messages = messages,
+                storedFileMessages = storedFileMessages,
+                transfers = transfers,
+                conversationId = selection.conversationId,
+                peerId = selection.peerId,
+                modifier = Modifier.weight(1f),
+                listState = timelineListState,
+                onRetryMessage = onRetryMessage,
+                onCancelFile = onCancelFile,
+                onOpenFile = openFile,
+            )
+            Composer(
+                onSend = onSend,
+                onAttachFile = launchFilePicker,
+                onInputFocused = {
+                    coroutineScope.launch {
+                        if (timelineListState.layoutInfo.totalItemsCount > 0) {
+                            timelineListState.scrollToItem(0)
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
+        }
+        if (isFileDragActive) FileDropOverlay()
+    }
+}
+
+@Composable
+private fun FileDropOverlay() {
+    val shape = RoundedCornerShape(24.dp)
+    Surface(
+        modifier = Modifier.fillMaxSize().padding(18.dp),
+        shape = shape,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.96f),
+        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+    ) {
+        Column(
+            modifier = Modifier.padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AttachFile,
+                contentDescription = null,
+                modifier = Modifier.size(52.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "松开发送文件",
+                modifier = Modifier.padding(top = 14.dp),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Text(
+                text = "支持一次拖入最多 ${FileTransferService.MAX_FILES_PER_BATCH} 个文件",
+                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 

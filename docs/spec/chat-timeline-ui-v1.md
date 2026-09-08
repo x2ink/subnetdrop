@@ -56,6 +56,11 @@ Text-message bodies use Compose's platform selection container. Android exposes 
 action; desktop users can drag to select and use the platform copy shortcut. Delivery/read state and file cards remain
 outside the selection range.
 
+An open desktop chat page is also a file drop target. Entering it with an operating-system file-list payload overlays a
+clear “release to send” affordance without changing the timeline layout. Dropping delegates to the same validated batch
+send callback as the attachment picker; leaving or ending the drag removes the overlay. Android does not register this
+desktop-only interaction.
+
 Clearing the current selection must not emit an empty text-message list while Navigation 3 may still retain the outgoing
 entry. The last list remains available until the entry is disposed, and the timeline filters text rows by conversation ID
 so a newly selected peer cannot briefly display another conversation.
@@ -77,3 +82,5 @@ so a newly selected peer cannot briefly display another conversation.
 11. The home bottom navigation exposes only Nearby and Settings.
 12. Android text messages support long-press selection/copy, while desktop text messages support pointer selection and
     Ctrl/Cmd+C without selecting delivery state text.
+13. Dropping regular files onto an open desktop chat displays an explicit affordance and invokes the existing batch file
+    send path; leaving the chat or completing the drag always removes the affordance.

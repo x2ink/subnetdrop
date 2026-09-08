@@ -111,6 +111,8 @@ stateDiagram-v2
 ## 平台文件边界
 
 - Android 和桌面统一使用 FileKit 的 Compose Multiplatform launcher。
+- macOS/Windows 聊天页还使用 Compose Desktop 系统拖放目标接收文件列表；拖入文件与 FileKit 选择结果汇入同一个
+  元数据、批次数量和大小预检函数，再进入现有 `sendFiles`，不会形成另一套传输实现。目录和非文件载荷会被拒绝。
 - Android provider 返回的内容先按当前上限检查元数据，再通过 FileKit 复制到应用 cache，避免超限文件在拒绝前占用
   本机空间，最后交给 JVM 共享传输实现读取。
 - 保存目录与单文件大小上限通过 Multiplatform Settings 持久化；Android 自定义目录使用 SAF 并保留 URI 权限，

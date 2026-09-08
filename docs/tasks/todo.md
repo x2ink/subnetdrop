@@ -1,5 +1,13 @@
 # SubnetDrop 任务状态
 
+## 当前计划：桌面聊天页拖放发送文件
+
+- [x] 复用现有文件预检与批量发送入口，避免拖放形成第二套传输链路。
+- [x] 使用 Compose Desktop 系统拖放 API 接收普通文件，拒绝目录、非文件数据和超过批次上限的输入。
+- [x] 在聊天页拖入期间显示明确的投放提示，Android 保持原有行为。
+- [x] 补充桌面拖放输入测试、聊天 UI 规格和验证记录。
+- [x] 运行共享 JVM 测试、Android shared 编译和桌面编译，不安装 Android 应用。
+
 ## 当前计划：首页手动刷新附近设备
 
 - [x] 为发现端口增加立即刷新语义：发送一次组播公告并立即探测所有已知端点。
@@ -227,6 +235,14 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+桌面聊天页现在通过 Compose Desktop `dragAndDropTarget` 接收操作系统文件列表。拖入、离开和结束事件只控制
+“松开发送文件”覆盖提示；投放后将普通文件转换为 FileKit `PlatformFile`，与附件选择器共享
+`toTransferFiles` 预检，再调用现有 `sendFiles`，因此批次上限、用户设置的单文件上限、文件消息和三路并行传输
+语义保持一致。目录、非文件载荷和超过 50 个文件会显式失败。Android actual 不注册拖放目标。完整 JVM 回归、
+Android shared 编译和桌面编译通过，桌面应用也可启动；未向 Android 安装应用，真实 Finder/Explorer 指针拖动
+仍需交互式目标机验收。证据见
+[`verification/2026-09-08-desktop-file-drop.md`](./verification/2026-09-08-desktop-file-drop.md)。
 
 首页“附近设备”页现在使用内层 Material 3 Scaffold 在右下角展示刷新 FAB，底部导航的 content padding 会为设备
 列表保留可滚动高度，切换到设置页后按钮自动隐藏。点击经 ViewModel 和 Runtime 调用 `PeerDiscovery.refresh()`：

@@ -36,7 +36,7 @@ fun rememberFilePickerLauncher(
             selected ?: return@rememberFileKitPickerLauncher
             scope.launch {
                 try {
-                    onFilesSelected(selected.map { it.toTransferFile(maxFileSizeBytes) })
+                    onFilesSelected(selected.toTransferFiles(maxFileSizeBytes))
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
@@ -73,6 +73,14 @@ fun rememberSaveDirectoryPickerLauncher(
         },
     )
     return launcher::launch
+}
+
+internal suspend fun List<PlatformFile>.toTransferFiles(maxFileSizeBytes: Long): List<LocalFile> {
+    require(isNotEmpty()) { "没有可发送的文件" }
+    require(size <= FileTransferService.MAX_FILES_PER_BATCH) {
+        "一次最多发送 ${FileTransferService.MAX_FILES_PER_BATCH} 个文件"
+    }
+    return map { it.toTransferFile(maxFileSizeBytes) }
 }
 
 private suspend fun PlatformFile.toTransferFile(maxFileSizeBytes: Long): LocalFile {
