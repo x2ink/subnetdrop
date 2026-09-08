@@ -1,5 +1,24 @@
 # SubnetDrop 任务状态
 
+## 当前计划：WebSocket 控制 + HTTP/1.1 Streaming 文件通道
+
+- [x] 更新文件传输规格与架构图，冻结控制面、HTTP 数据面、认证、进度和完成语义。
+- [x] 为接收方签发短时一次性上传 Token，并将 HTTP 请求签名绑定到双方身份、文件长度和传输 ID。
+- [x] 使用 Ktor CIO `WriteChannelContent` / `receiveChannel()` 连续传输文件正文，不使用 WebSocket Binary Frame。
+- [x] 保留 WebSocket 作为单文件控制连接，异步发布接收端确认进度，不再每 4 MiB 停止等待 ACK。
+- [x] 接收端为每个文件使用长生命周期流式写入路径，边写边计算 SHA-256，完成验证后才发布临时文件。
+- [x] 保持全局三文件并行、取消清理、文件大小上限和终态持久化语义。
+- [x] 补充认证失败、长度不符、内容完整性、异步进度、并行与失败隔离测试。
+- [x] 运行协议专项、完整 JVM/桌面和 Android shared 编译验证，不安装 Android 应用。
+
+## 当前计划：WebSocket 文件吞吐代码优化
+
+- [x] 保持 512 KiB 协议分块，将有界文件帧队列从 2 调整为 8，使每连接最多约 4 MiB 排队数据。
+- [x] 在发送端按 4 MiB 确认窗口复用 8 个块缓冲，只为最后一个非整块数据分配精确数组。
+- [x] 将接收目标改为复用的 kotlinx-io 缓冲 Sink，去掉每个分块新建临时 Buffer 的路径。
+- [x] 保持 4 MiB 接收端签名进度确认、SHA-256、三文件并行和最终落盘语义不变，补充回归与文档。
+- [x] 最多进行 3 轮测试修正，运行文件传输专项、完整 JVM、桌面和 Android shared 验证，不安装 Android 应用。
+
 ## 当前计划：应用内语言切换
 
 - [x] 定义并持久化“跟随系统 / 简体中文 / English / 日本語”应用语言设置，默认跟随系统。
@@ -262,6 +281,13 @@
 
 ## 审查记录
 
+现有 WebSocket 文件数据面完成第一轮低风险代码优化：512 KiB 分块和 4 MiB 接收端签名确认不变，但每连接的有界
+队列从 2 帧扩到 8 帧，使 Ktor 调度抖动时仍可维持约 4 MiB 在途数据。发送端不再为每个完整分块创建新数组，而是
+按确认窗口预分配 8 个数组，只有收到有序确认后才复用；接收端为每个文件复用一个 buffered Sink，去掉逐帧临时
+Buffer。协议专项与完整 52 任务回归通过，未在真实设备宣称具体提速幅度。下一阶段 Raw TCP、断点续传、多 TCP 流
+与 QUIC 的收益和风险见 [`file-transfer-throughput-options.md`](../design-docs/file-transfer-throughput-options.md)，验证证据见
+[`verification/2026-09-08-websocket-transfer-throughput.md`](./verification/2026-09-08-websocket-transfer-throughput.md)。
+
 设置页新增“应用语言”卡片和 Material 3 单选弹窗，提供“跟随系统 / 简体中文 / English / 日本語”。选择通过
 `AppSettingsRepository` 的只读 `StateFlow` 进入共享 UI，由独立的 Multiplatform Settings 存储持久化；未知存储值
 回退为跟随系统。Compose 根节点在 Android/JVM 应用平台 Locale 后按语言重建资源环境，所以当前页面和后续 Snackbar
@@ -509,3 +535,10 @@ GitHub Runner 首次执行，不能把“工作流已配置”误写成“目标
 删除内容仅包括已经完成的一次性整改/重命名/Skill 记录和旧品牌截图；当前协议规格、文件传输规格与最新平台
 验证均保留。所有本地 Markdown 链接可解析，代码围栏成对，`git diff --check` 通过。本轮未执行 Android 构建、
 安装、模拟器、真机或 ADB 操作。
+
+文件正文已从 WebSocket Binary Frame 和 4 MiB 停等检查点迁移到每文件独立的 HTTP/1.1 PUT 连续流；签名
+WebSocket 只保留控制和接收端异步进度。接收决策签发五分钟有效、仅使用一次的随机 Token，HTTP 请求的 Ed25519
+签名绑定协议版本、双方身份、传输 ID、Token 和 `Content-Length`。发送和接收各复用 512 KiB I/O 缓冲并边传边
+计算 SHA-256，接收端通过校验后才发布临时文件；CIO 的 15 秒请求总超时对文件上传显式关闭，连接与无进度超时
+仍保留。12 项传输集成测试与完整 JVM/桌面/Android shared 回归通过，未安装 Android 应用；证据见
+[`verification/2026-09-08-http-streaming-file-transfer.md`](./verification/2026-09-08-http-streaming-file-transfer.md)。

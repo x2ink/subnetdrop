@@ -12,7 +12,8 @@ import io.github.vinceglb.filekit.sink
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.PUBLIC_DOWNLOADS_LOCATION
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.io.RawSink
+import kotlinx.io.Sink
+import kotlinx.io.buffered
 
 class AndroidIncomingFileStore(
     context: Context,
@@ -84,7 +85,7 @@ class AndroidIncomingFileStore(
     ) : IncomingFileTarget {
         override val temporaryPath: String = file.path
         override val finalPath: String = file.path
-        override val outputSink: RawSink = file.sink()
+        override val outputSink: Sink = file.sink().buffered()
 
         override fun persistedSizeOrNull(): Long? = resolver.openFileDescriptor(uri, READ_MODE)?.use { descriptor ->
             descriptor.statSize.takeIf { it >= 0 }

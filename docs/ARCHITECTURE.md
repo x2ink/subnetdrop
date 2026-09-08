@@ -32,6 +32,10 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [中英日三语与应用内语言切换 v1](spec/localization-v1.md)
 - [附近设备删除 v1](spec/peer-deletion-v1.md)
 
+### 设计评估：下一步如何取舍
+
+- [文件传输吞吐升级方案](design-docs/file-transfer-throughput-options.md)
+
 ### 执行与验证：当前做到什么程度
 
 - [任务与审查记录](tasks/todo.md)
@@ -46,6 +50,8 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [应用内语言切换验证](tasks/verification/2026-09-08-app-language-setting.md)
 - [附近设备删除与历史清理验证](tasks/verification/2026-09-08-peer-deletion.md)
 - [文件进度同步与吞吐优化验证](tasks/verification/2026-09-07-file-progress-throughput.md)
+- [WebSocket 文件吞吐代码优化验证](tasks/verification/2026-09-08-websocket-transfer-throughput.md)
+- [HTTP/1.1 Streaming 文件通道验证](tasks/verification/2026-09-08-http-streaming-file-transfer.md)
 - [聊天时间线与 Android IME 验证](tasks/verification/2026-09-05-chat-timeline-ime.md)
 - [首页导航与聊天返回验证](tasks/verification/2026-09-05-home-navigation-chat-return.md)
 - [文件设置、系统打开与 Android 系统栏验证](tasks/verification/2026-09-05-file-settings-system-bars.md)
@@ -62,7 +68,7 @@ flowchart TB
     UserA[User on device A] --> ClientA[SubnetDrop client A]
     UserB[User on device B] --> ClientB[SubnetDrop client B]
     ClientA <-->|UDP announce + WebSocket probe| ClientB
-    ClientA <-->|Ktor WebSocket over LAN| ClientB
+    ClientA <-->|Ktor WebSocket control + HTTP file stream| ClientB
     ClientA --> DbA[(Local SQLite A)]
     ClientB --> DbB[(Local SQLite B)]
     ClientA --> KeysA[Platform secret store A]
@@ -73,8 +79,8 @@ flowchart TB
     classDef excluded stroke-dasharray: 5 5,fill:#fafafa,color:#777
 ```
 
-“P2P”在本项目中的准确含义是：局域网内两端直接建立 TCP/WebSocket 连接，每端同时具备监听和发起连接能力。
-它不表示互联网级 DHT、NAT 穿透或中继网络。
+“P2P”在本项目中的准确含义是：局域网内两端直接建立 TCP 连接，WebSocket 承载控制，HTTP 承载文件正文；
+每端同时具备监听和发起连接能力。它不表示互联网级 DHT、NAT 穿透或中继网络。
 
 ## 模块与依赖方向
 
@@ -126,16 +132,17 @@ sequenceDiagram
     B->>B: Apply automatic or confirmation policy
     B-->>A: Signed FILE_DECISION
     par Up to three independent file sessions
-        A->>B: Accepted upload WebSocket A
-        A->>B: Accepted upload WebSocket B
-        A->>B: Accepted upload WebSocket C
+        A->>B: HTTP stream + control WebSocket A
+        A->>B: HTTP stream + control WebSocket B
+        A->>B: HTTP stream + control WebSocket C
     end
-    A->>B: Signed FILE_STREAM_START per file
-    loop Ordered 512 KiB chunks per session
-        A->>B: Plain binary frame
-        A->>B: Signed checkpoint every 4 MiB
-        B-->>A: Signed receiver-confirmed progress
+    A->>B: Signed FILE_STREAM_START with one-time token per file
+    A->>B: PUT /api/files/upload with signed headers
+    loop Continuous HTTP body per file
+        A->>B: Plain file bytes
+        B-->>A: Signed receiver-confirmed progress over WebSocket
     end
+    B-->>A: HTTP 202 after exact body is stored
     A->>B: Signed FILE_STREAM_COMPLETE with SHA-256
     B-->>A: Signed DELIVERY_ACK
     B->>B: Verify length and SHA-256, publish file

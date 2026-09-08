@@ -24,6 +24,11 @@ import ink.x2.subnetdrop.network.crypto.SecureKeyValueStore
 import ink.x2.subnetdrop.network.crypto.TinkSecureMessageCodec
 import ink.x2.subnetdrop.network.identity.LocalIdentityService
 import ink.x2.subnetdrop.network.storage.FileKitIncomingFileStore
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.put
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +38,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.withTimeout
 import java.io.File
@@ -48,6 +54,25 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SubnetDropTransportTest {
+    @Test
+    fun rejectsUnauthenticatedHttpUploadRequest() {
+        runBlocking {
+            val receiver = TestNode("http-auth", availablePort())
+            receiver.transport.start()
+            try {
+                HttpClient(CIO).use { client ->
+                    val response = client.put("http://127.0.0.1:${receiver.port}/api/files/upload")
+
+                    assertEquals(HttpStatusCode.BadRequest, response.status)
+                    assertTrue(response.bodyAsText().contains("X-SubnetDrop-Transfer-Id"))
+                    assertTrue(receiver.transport.transfers.value.isEmpty())
+                }
+            } finally {
+                receiver.transport.stop()
+            }
+        }
+    }
+
     @Test
     fun probesReachabilityWithoutPreparingCryptographicIdentity() {
         runBlocking {
@@ -104,7 +129,7 @@ class SubnetDropTransportTest {
     }
 
     @Test
-    fun automaticallyAcceptsAndTransfersFileThroughBinaryStreamByDefault() {
+    fun automaticallyAcceptsAndTransfersFileThroughHttpStreamByDefault() {
         runBlocking {
             val alice = TestNode("alice-file", availablePort())
             val bob = TestNode("bob-file", availablePort())
@@ -232,6 +257,47 @@ class SubnetDropTransportTest {
 
                 assertEquals(FileTransferStatus.COMPLETED, alice.transport.transfers.value.single().status)
                 assertEquals(FileTransferStatus.COMPLETED, bob.transport.transfers.value.single().status)
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
+
+    @Test
+    fun rejectsHttpUploadWhenSourceLengthChangesAfterOffer() {
+        runBlocking {
+            val alice = TestNode("alice-length-change", availablePort())
+            val bob = TestNode("bob-length-change", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                bob.fileSettings.updateRequireIncomingConfirmation(true)
+                val source = File(alice.workingDirectory, "changed.bin").apply {
+                    writeBytes(ByteArray(1_024) { it.toByte() })
+                }
+                val selected = LocalFile(source.name, source.path, source.length())
+                supervisorScope {
+                    val sending = async { alice.transport.sendFile(bob.id, selected) }
+                    val offer = withTimeout(5_000L) {
+                        bob.transport.incomingOffers.first { it.isNotEmpty() }.single()
+                    }
+
+                    source.appendBytes(byteArrayOf(1))
+                    bob.transport.acceptOffer(offer.transferId)
+                    assertFailsWith<Exception> { sending.await() }
+                }
+
+                assertEquals(FileTransferStatus.FAILED, alice.transport.transfers.value.single().status)
+                withTimeout(5_000L) {
+                    bob.transport.transfers.first { transfers ->
+                        transfers.singleOrNull()?.status == FileTransferStatus.FAILED
+                    }
+                }
+                assertFalse(File(bob.fileSettings.saveDirectory, source.name).exists())
             } finally {
                 alice.transport.stop()
                 bob.transport.stop()

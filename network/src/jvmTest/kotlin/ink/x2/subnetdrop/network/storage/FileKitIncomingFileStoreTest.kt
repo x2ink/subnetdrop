@@ -1,7 +1,6 @@
 package ink.x2.subnetdrop.network.storage
 
 import kotlinx.coroutines.runBlocking
-import kotlinx.io.Buffer
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,7 +22,7 @@ class FileKitIncomingFileStoreTest {
             )
             val payload = "received".encodeToByteArray()
 
-            target.outputSink.write(Buffer().apply { write(payload) }, payload.size.toLong())
+            target.outputSink.write(payload)
             target.outputSink.flush()
             target.outputSink.close()
 

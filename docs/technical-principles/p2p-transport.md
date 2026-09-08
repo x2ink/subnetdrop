@@ -7,7 +7,7 @@ SubnetDrop 的 P2P 是局域网内的直接连接：每个客户端都启动 Kto
 
 ```mermaid
 flowchart LR
-    A[Device A\nlistener + client] <-->|Direct TCP 45892\nWebSocket /chat| B[Device B\nlistener + client]
+    A[Device A\nlistener + client] <-->|Direct TCP 45892\nWebSocket control + HTTP file stream| B[Device B\nlistener + client]
     Relay[(Relay / cloud)]:::excluded
     A -. not used .-> Relay
     B -. not used .-> Relay
@@ -17,16 +17,18 @@ flowchart LR
 这不是互联网级 P2P：当前没有 NAT 穿透、DHT、打洞、中继或离线投递。两端必须能通过发现到的局域网地址直接
 访问彼此。
 
-## WebSocket 生命周期
+## 连接生命周期
 
 - 聊天、配对和短控制请求使用短生命周期的 request/response WebSocket 会话。
 - 设备发现和在线心跳复用短生命周期 `PING/PONG`；1.5 秒探测超时，连续 3 次失败才判定离线。
-- 一个已接受的文件使用一个上传 WebSocket，所有 512 KiB 二进制分块在该连接内顺序发送。
+- 一个已接受的文件使用一个控制 WebSocket 和一个独立 HTTP/1.1 上传请求；接收端通过控制连接异步上报落盘进度，
+  文件正文不会为了等待进度确认而停顿。
 - 每个请求都有超时和帧大小限制；收到协议错误会显式失败，不把异常吞成默认成功。
 - 应用停止时关闭 listener、取消会话并把已发现 peer 标记为离线。
 
-WebSocket 本身使用局域网明文 TCP。聊天正文由应用层 HPKE 加密，文件内容则为追求吞吐的明文
-二进制流；同网观察者可能读取文件。Ed25519 认证文件会话和最终摘要，但不提供文件机密性。
+WebSocket 与 HTTP 都使用局域网明文 TCP。聊天正文由应用层 HPKE 加密，文件内容则为追求吞吐的明文流；同网
+观察者可能读取文件与 HTTP 头。一次性 Token 和 Ed25519 请求签名负责上传授权，最终摘要负责完整性，但不提供
+文件机密性。
 
 ## 协议外层
 
@@ -41,7 +43,7 @@ data class TransportFrame(
 )
 ```
 
-协议版本 1 的帧类型包括：
+传输帧协议版本 2 的帧类型包括：
 
 | 类别 | 帧类型 |
 |---|---|

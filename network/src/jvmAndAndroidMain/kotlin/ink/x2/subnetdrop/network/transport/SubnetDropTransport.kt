@@ -40,17 +40,36 @@ import ink.x2.subnetdrop.network.protocol.TransportFrame
 import ink.x2.subnetdrop.network.storage.IncomingFileStore
 import ink.x2.subnetdrop.network.storage.IncomingFileTarget
 import io.ktor.client.HttpClient
+import io.ktor.client.request.headers
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.client.request.url
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.engine.cio.CIO as ClientCio
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLProtocol
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.path
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO as ServerCio
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.request.receiveChannel
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.server.websocket.WebSockets as ServerWebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.readAvailable
+import io.ktor.utils.io.writeFully
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.readText
@@ -73,12 +92,12 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.io.Buffer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.util.Base64
 
 class SubnetDropTransport(
@@ -100,20 +119,26 @@ class SubnetDropTransport(
     private val transferMutex = Mutex()
     private val outgoingTransferSlots = Semaphore(FileTransferService.MAX_PARALLEL_OUTGOING_TRANSFERS)
     private val json = Json { ignoreUnknownKeys = false }
+    private val secureRandom = SecureRandom()
     private val client by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         HttpClient(ClientCio) {
+            engine {
+                // Large uploads use receiver progress as their stall timeout instead of CIO's 15-second total timeout.
+                requestTimeout = 0
+            }
             install(ClientWebSockets) {
                 maxFrameSize = MAX_FRAME_SIZE_BYTES
                 channels {
                     incoming = bounded(CONTROL_FRAME_QUEUE_CAPACITY)
-                    outgoing = bounded(FILE_FRAME_QUEUE_CAPACITY)
+                    outgoing = bounded(CONTROL_FRAME_QUEUE_CAPACITY)
                 }
             }
         }
     }
     private var server: EmbeddedServer<*, *>? = null
-    private val pendingDecisions = mutableMapOf<String, CompletableDeferred<Boolean>>()
+    private val pendingDecisions = mutableMapOf<String, CompletableDeferred<FileDecisionPayload>>()
     private val incomingSessions = mutableMapOf<String, IncomingSession>()
+    private val incomingUploadControls = mutableMapOf<String, IncomingUploadControl>()
     private val cancelledTransfers = mutableSetOf<String>()
     private val mutableIncomingOffers = MutableStateFlow<List<IncomingFileOffer>>(emptyList())
     private val mutableTransfers = MutableStateFlow<List<FileTransfer>>(emptyList())
@@ -234,7 +259,7 @@ class SubnetDropTransport(
         setTransfer(transfer)
         try {
             outgoingTransferSlots.withPermit {
-                val decision = CompletableDeferred<Boolean>()
+                val decision = CompletableDeferred<FileDecisionPayload>()
                 transferMutex.withLock { pendingDecisions[transferId] = decision }
                 try {
                     updateTransfer(transferId) { it.copy(status = FileTransferStatus.WAITING_FOR_ACCEPTANCE) }
@@ -251,17 +276,21 @@ class SubnetDropTransport(
                             ),
                         ),
                     )
-                    val accepted = withTimeout(FILE_OFFER_TIMEOUT_MS) { decision.await() }
+                    val result = withTimeout(FILE_OFFER_TIMEOUT_MS) { decision.await() }
                     if (isTransferCancelled(transferId)) {
                         updateTransfer(transferId) { it.copy(status = FileTransferStatus.CANCELLED) }
                         return
                     }
-                    if (!accepted) {
+                    if (!result.accepted) {
                         updateTransfer(transferId) { it.copy(status = FileTransferStatus.REJECTED) }
                         return
                     }
+                    val uploadToken = requireNotNull(result.uploadToken) {
+                        "Accepted file decision did not include an upload token"
+                    }
+                    validateUploadToken(uploadToken)
                     updateTransfer(transferId) { it.copy(status = FileTransferStatus.TRANSFERRING) }
-                    uploadFile(peerId, transferId, source)
+                    uploadFile(peerId, transferId, uploadToken, source)
                     updateTransfer(transferId) {
                         it.copy(status = FileTransferStatus.COMPLETED, transferredBytes = it.size)
                     }
@@ -306,9 +335,9 @@ class SubnetDropTransport(
 
     override suspend fun acceptOffer(transferId: String) {
         val offer = removeIncomingOffer(transferId)
-        prepareIncomingTransfer(offer)
         try {
-            sendFileDecision(offer, accepted = true)
+            val uploadToken = prepareIncomingTransfer(offer)
+            sendFileDecision(offer, accepted = true, uploadToken = uploadToken)
         } catch (exception: Exception) {
             discardIncomingSession(transferId)
             updateTransfer(transferId) {
@@ -322,14 +351,14 @@ class SubnetDropTransport(
         val offer = removeIncomingOffer(transferId)
         discardIncomingSession(transferId)
         updateTransfer(transferId) { it.copy(status = FileTransferStatus.REJECTED) }
-        sendFileDecision(offer, accepted = false)
+        sendFileDecision(offer, accepted = false, uploadToken = null)
     }
 
     override suspend fun cancelTransfer(transferId: String) {
         val transfer = findTransfer(transferId)
         transferMutex.withLock {
             cancelledTransfers += transferId
-            pendingDecisions[transferId]?.complete(false)
+            pendingDecisions[transferId]?.complete(FileDecisionPayload(transferId, false, null))
         }
         removeOfferIfPresent(transferId)
         discardIncomingSession(transferId)
@@ -348,7 +377,10 @@ class SubnetDropTransport(
                 .filter { it.peerId == peerId }
                 .mapTo(mutableSetOf(), FileTransfer::id)
             cancelledTransfers += transferIds
-            transferIds.forEach { pendingDecisions.remove(it)?.complete(false) }
+            transferIds.forEach { transferId ->
+                pendingDecisions.remove(transferId)?.complete(FileDecisionPayload(transferId, false, null))
+                incomingUploadControls.remove(transferId)
+            }
             val peerSessions = incomingSessions.values.filter { it.peerId == peerId }
             peerSessions.forEach { incomingSessions.remove(it.transferId) }
             mutableIncomingOffers.value = mutableIncomingOffers.value.filterNot { it.peerId == peerId }
@@ -399,13 +431,16 @@ class SubnetDropTransport(
         install(ServerWebSockets) {
             maxFrameSize = MAX_FRAME_SIZE_BYTES
             channels {
-                incoming = bounded(FILE_FRAME_QUEUE_CAPACITY)
+                incoming = bounded(CONTROL_FRAME_QUEUE_CAPACITY)
                 outgoing = bounded(CONTROL_FRAME_QUEUE_CAPACITY)
             }
         }
         routing {
             webSocket(CHAT_PATH) {
                 handleIncomingSession()
+            }
+            put(FILE_UPLOAD_PATH) {
+                handleHttpFileUpload(call)
             }
         }
     }
@@ -422,17 +457,16 @@ class SubnetDropTransport(
                             val frame = json.decodeFromString<TransportFrame>(text)
                             if (frame.type == FrameType.FILE_STREAM_START) {
                                 require(upload == null) { "An upload is already active on this connection" }
-                                upload = beginIncomingUpload(frame)
+                                val startedUpload = beginIncomingUpload(frame)
+                                registerIncomingUploadControl(startedUpload, this)
+                                upload = startedUpload
                                 sendEncoded(
                                     createDeliveryAck(
-                                        streamStartAckId(upload.transferId),
-                                        upload.localIdentity,
-                                        upload.senderIdentity.deviceId,
+                                        streamStartAckId(startedUpload.transferId),
+                                        startedUpload.localIdentity,
+                                        startedUpload.senderIdentity.deviceId,
                                     ),
                                 )
-                            } else if (frame.type == FrameType.FILE_STREAM_PROGRESS) {
-                                val activeUpload = requireNotNull(upload) { "File stream was not authenticated" }
-                                sendEncoded(acknowledgeIncomingProgress(frame, activeUpload))
                             } else if (frame.type == FrameType.FILE_STREAM_COMPLETE) {
                                 val activeUpload = requireNotNull(upload) { "File stream was not authenticated" }
                                 completeIncomingUpload(frame, activeUpload)
@@ -443,32 +477,32 @@ class SubnetDropTransport(
                                         activeUpload.senderIdentity.deviceId,
                                     ),
                                 )
+                                unregisterIncomingUploadControl(activeUpload.transferId, this)
                                 upload = null
                             } else {
                                 val response = handleIncomingFrame(frame)
                                 response?.let { sendEncoded(it) }
                             }
                         }
-                        is Frame.Binary -> {
-                            val activeUpload = requireNotNull(upload) { "File stream was not authenticated" }
-                            appendIncomingBytes(
-                                peerId = activeUpload.senderIdentity.deviceId,
-                                transferId = activeUpload.transferId,
-                                bytes = rawFrame.data,
-                            )
-                        }
+                        is Frame.Binary -> error("File bytes must use the HTTP upload endpoint")
                         else -> Unit
                     }
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
-                    upload?.let { failIncomingUpload(it.transferId, exception) }
+                    upload?.let {
+                        failIncomingUpload(it.transferId, exception)
+                        unregisterIncomingUploadControl(it.transferId, this)
+                    }
                     upload = null
                     sendEncoded(errorFrame("INVALID_REQUEST", exception.message ?: "Invalid request"))
                 }
             }
         } finally {
-            upload?.let { failIncomingUpload(it.transferId, IllegalStateException("File connection closed")) }
+            upload?.let {
+                failIncomingUpload(it.transferId, IllegalStateException("File control connection closed"))
+                unregisterIncomingUploadControl(it.transferId, this)
+            }
         }
     }
 
@@ -611,8 +645,8 @@ class SubnetDropTransport(
         }
         if (!requiresConfirmation) {
             try {
-                prepareIncomingTransfer(incomingOffer)
-                sendFileDecision(incomingOffer, accepted = true)
+                val uploadToken = prepareIncomingTransfer(incomingOffer)
+                sendFileDecision(incomingOffer, accepted = true, uploadToken = uploadToken)
             } catch (exception: Exception) {
                 discardIncomingSession(offer.transferId)
                 updateTransfer(offer.transferId) {
@@ -631,10 +665,12 @@ class SubnetDropTransport(
         val senderIdentity = trustedSender(frame.senderId)
         val decision = decodeSignedFilePayload<FileDecisionPayload>(frame, senderIdentity)
         validateIdentifier(decision.transferId, "transfer ID")
+        if (decision.accepted) validateUploadToken(requireNotNull(decision.uploadToken))
+        if (!decision.accepted) require(decision.uploadToken == null) { "Rejected transfer included an upload token" }
         val pending = transferMutex.withLock { pendingDecisions[decision.transferId] }
             ?: error("Transfer offer is no longer pending")
         require(findTransfer(decision.transferId).peerId == frame.senderId) { "Transfer peer mismatch" }
-        require(pending.complete(decision.accepted)) { "Transfer decision was already received" }
+        require(pending.complete(decision)) { "Transfer decision was already received" }
         return createDeliveryAck(decision.transferId, localIdentity, senderIdentity.deviceId)
     }
 
@@ -645,9 +681,18 @@ class SubnetDropTransport(
         val senderIdentity = trustedSender(frame.senderId)
         val start = decodeSignedFilePayload<FileStreamStartPayload>(frame, senderIdentity)
         validateIdentifier(start.transferId, "transfer ID")
+        validateUploadToken(start.uploadToken)
         val transfer = findTransfer(start.transferId)
         require(transfer.peerId == frame.senderId) { "Transfer peer mismatch" }
         require(transfer.status == FileTransferStatus.TRANSFERRING) { "Transfer was not accepted" }
+        transferMutex.withLock {
+            val session = requireNotNull(incomingSessions[start.transferId]) { "Transfer session does not exist" }
+            require(session.uploadToken == start.uploadToken) { "Upload token does not match transfer" }
+            require(timestampProvider.nowMillis() <= requireNotNull(session.uploadTokenExpiresAt)) {
+                "Upload token has expired"
+            }
+            require(start.transferId !in incomingUploadControls) { "Upload control connection already exists" }
+        }
         return IncomingUpload(start.transferId, localIdentity, senderIdentity)
     }
 
@@ -661,35 +706,189 @@ class SubnetDropTransport(
         completeIncomingTransfer(completion.transferId, completion.sha256)
     }
 
-    private suspend fun acknowledgeIncomingProgress(
-        frame: TransportFrame,
+    private suspend fun registerIncomingUploadControl(
         upload: IncomingUpload,
-    ): TransportFrame {
-        validateFrame(frame)
-        require(frame.senderId == upload.senderIdentity.deviceId) { "Transfer sender changed" }
-        require(frame.recipientId == upload.localIdentity.deviceId) { "Frame is addressed to another device" }
-        val progress = decodeSignedFilePayload<FileStreamProgressPayload>(frame, upload.senderIdentity)
-        require(progress.transferId == upload.transferId) { "Transfer progress does not match stream" }
-        val confirmedBytes = transferMutex.withLock {
-            val session = requireNotNull(incomingSessions[progress.transferId]) { "Transfer session does not exist" }
-            require(progress.receivedBytes == session.receivedBytes) {
-                "Transfer progress does not match received bytes"
+        controlSession: DefaultWebSocketServerSession,
+    ) {
+        transferMutex.withLock {
+            require(upload.transferId !in incomingUploadControls) { "Upload control connection already exists" }
+            incomingUploadControls[upload.transferId] = IncomingUploadControl(upload, controlSession)
+        }
+    }
+
+    private suspend fun unregisterIncomingUploadControl(
+        transferId: String,
+        controlSession: DefaultWebSocketServerSession,
+    ) {
+        transferMutex.withLock {
+            if (incomingUploadControls[transferId]?.session === controlSession) {
+                incomingUploadControls.remove(transferId)
             }
+        }
+    }
+
+    private suspend fun handleHttpFileUpload(call: ApplicationCall) {
+        val request = try {
+            authenticateHttpUpload(call)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: HttpUploadException) {
+            call.respondText(exception.message.orEmpty(), status = exception.status)
+            return
+        } catch (exception: Exception) {
+            call.respondText("Invalid upload request", status = HttpStatusCode.Forbidden)
+            return
+        }
+        try {
+            receiveHttpFileBody(call, request)
+            call.respondText("", status = HttpStatusCode.Accepted)
+        } catch (exception: CancellationException) {
+            failIncomingUpload(request.session.transferId, exception)
+            throw exception
+        } catch (exception: Exception) {
+            failIncomingUpload(request.session.transferId, exception)
+            call.respondText(
+                exception.message ?: "File upload failed",
+                status = HttpStatusCode.UnprocessableEntity,
+            )
+        }
+    }
+
+    private suspend fun authenticateHttpUpload(call: ApplicationCall): AuthenticatedHttpUpload {
+        val transferId = requireHttpHeader(call, HEADER_TRANSFER_ID)
+        val senderId = requireHttpHeader(call, HEADER_SENDER_ID)
+        val signatureValue = requireHttpHeader(call, HEADER_UPLOAD_SIGNATURE)
+        validateIdentifier(transferId, "transfer ID")
+        validateIdentifier(senderId, "sender ID")
+        val authorization = requireHttpHeader(call, HttpHeaders.Authorization)
+        requireHttp(authorization.startsWith(BEARER_PREFIX), "Invalid upload authorization")
+        val uploadToken = authorization.removePrefix(BEARER_PREFIX)
+        validateUploadToken(uploadToken)
+        val contentLength = requireHttpHeader(call, HttpHeaders.ContentLength).toLongOrNull()
+            ?: throw HttpUploadException(HttpStatusCode.BadRequest, "Invalid content length")
+        val localIdentity = localIdentityService.get()
+        val senderIdentity = trustedSender(senderId)
+        val signature = runCatching { Base64.getDecoder().decode(signatureValue) }
+            .getOrElse { throw HttpUploadException(HttpStatusCode.Forbidden, "Invalid upload signature") }
+        runCatching {
+            secureMessageCodec.verify(
+                httpUploadSigningData(
+                    senderId = senderId,
+                    recipientId = localIdentity.deviceId,
+                    transferId = transferId,
+                    uploadToken = uploadToken,
+                    contentLength = contentLength,
+                ),
+                signature,
+                senderIdentity,
+            )
+        }.getOrElse { throw HttpUploadException(HttpStatusCode.Forbidden, "Invalid upload signature") }
+        return transferMutex.withLock {
+            val current = incomingSessions[transferId]
+                ?: throw HttpUploadException(HttpStatusCode.NotFound, "Transfer session does not exist")
+            val control = incomingUploadControls[transferId]
+                ?: throw HttpUploadException(HttpStatusCode.Conflict, "Upload control connection is not active")
+            requireHttp(current.peerId == senderId, "Transfer peer mismatch")
+            requireHttp(control.upload.senderIdentity.deviceId == senderId, "Transfer control identity mismatch")
+            requireHttp(current.uploadToken == uploadToken, "Upload token does not match transfer")
+            requireHttp(
+                timestampProvider.nowMillis() <= requireNotNull(current.uploadTokenExpiresAt),
+                "Upload token has expired",
+            )
+            requireHttp(contentLength == current.size, "Content length does not match offer")
+            requireHttp(!current.uploadStarted, "Upload token was already consumed")
+            requireHttp(current.target != null, "Transfer destination is not prepared")
+            requireHttp(transferId !in cancelledTransfers, "Transfer was cancelled")
+            val claimed = current.copy(uploadStarted = true)
+            incomingSessions[transferId] = claimed
+            AuthenticatedHttpUpload(claimed, control)
+        }
+    }
+
+    private suspend fun receiveHttpFileBody(
+        call: ApplicationCall,
+        request: AuthenticatedHttpUpload,
+    ) {
+        val target = requireNotNull(request.session.target)
+        val digest = MessageDigest.getInstance("SHA-256")
+        var receivedBytes = 0L
+        var reportedBytes = 0L
+        request.session.ioMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val body = call.receiveChannel()
+                val buffer = ByteArray(FILE_IO_BUFFER_SIZE_BYTES)
+                while (true) {
+                    val count = body.readAvailable(buffer)
+                    if (count < 0) break
+                    if (count == 0) continue
+                    require(receivedBytes + count <= request.session.size) { "File exceeds offered size" }
+                    target.outputSink.write(buffer, 0, count)
+                    digest.update(buffer, 0, count)
+                    receivedBytes += count
+                    if (receivedBytes - reportedBytes >= FILE_PROGRESS_WINDOW_BYTES) {
+                        target.outputSink.emit()
+                        publishIncomingProgress(request, receivedBytes)
+                        reportedBytes = receivedBytes
+                    }
+                }
+                require(receivedBytes == request.session.size) {
+                    "Received byte count $receivedBytes does not match offered size ${request.session.size}"
+                }
+                target.outputSink.emit()
+            }
+            if (receivedBytes > reportedBytes) {
+                publishIncomingProgress(request, receivedBytes)
+            }
+            val receivedSha256 = digest.digest().toHex()
+            transferMutex.withLock {
+                val current = requireNotNull(incomingSessions[request.session.transferId]) {
+                    "Transfer session was cancelled"
+                }
+                require(current.ioMutex === request.session.ioMutex) { "Transfer session changed" }
+                incomingSessions[request.session.transferId] = current.copy(
+                    receivedBytes = receivedBytes,
+                    receivedSha256 = receivedSha256,
+                )
+            }
+        }
+    }
+
+    private suspend fun publishIncomingProgress(
+        request: AuthenticatedHttpUpload,
+        receivedBytes: Long,
+    ) {
+        transferMutex.withLock {
+            val current = requireNotNull(incomingSessions[request.session.transferId]) {
+                "Transfer session was cancelled"
+            }
+            require(current.ioMutex === request.session.ioMutex) { "Transfer session changed" }
+            require(receivedBytes in current.receivedBytes..current.size) { "Invalid received byte count" }
+            incomingSessions[request.session.transferId] = current.copy(receivedBytes = receivedBytes)
             mutableTransfers.value = mutableTransfers.value.map { transfer ->
-                if (transfer.id == progress.transferId) {
-                    transfer.copy(transferredBytes = session.receivedBytes)
+                if (transfer.id == request.session.transferId) {
+                    transfer.copy(transferredBytes = receivedBytes)
                 } else {
                     transfer
                 }
             }
-            session.receivedBytes
         }
-        return createSignedFileFrame(
-            type = FrameType.FILE_STREAM_PROGRESS,
-            sender = upload.localIdentity,
-            recipient = upload.senderIdentity,
-            payload = json.encodeToString(FileStreamProgressPayload(progress.transferId, confirmedBytes)),
+        request.control.session.sendEncoded(
+            createSignedFileFrame(
+                type = FrameType.FILE_STREAM_PROGRESS,
+                sender = request.control.upload.localIdentity,
+                recipient = request.control.upload.senderIdentity,
+                payload = json.encodeToString(
+                    FileStreamProgressPayload(request.session.transferId, receivedBytes),
+                ),
+            ),
         )
+    }
+
+    private fun requireHttpHeader(call: ApplicationCall, name: String): String =
+        call.request.headers[name] ?: throw HttpUploadException(HttpStatusCode.BadRequest, "Missing $name header")
+
+    private fun requireHttp(condition: Boolean, message: String) {
+        if (!condition) throw HttpUploadException(HttpStatusCode.Forbidden, message)
     }
 
     private suspend fun handleFileCancel(
@@ -703,7 +902,9 @@ class SubnetDropTransport(
         require(transfer.peerId == frame.senderId) { "Transfer peer mismatch" }
         transferMutex.withLock {
             cancelledTransfers += cancellation.transferId
-            pendingDecisions[cancellation.transferId]?.complete(false)
+            pendingDecisions[cancellation.transferId]?.complete(
+                FileDecisionPayload(cancellation.transferId, false, null),
+            )
         }
         removeOfferIfPresent(cancellation.transferId)
         discardIncomingSession(cancellation.transferId)
@@ -711,13 +912,17 @@ class SubnetDropTransport(
         return createDeliveryAck(cancellation.transferId, localIdentity, senderIdentity.deviceId)
     }
 
-    private suspend fun uploadFile(peerId: String, transferId: String, source: File) {
+    private suspend fun uploadFile(
+        peerId: String,
+        transferId: String,
+        uploadToken: String,
+        source: File,
+    ) {
         val peer = requireNotNull(peerRepository.findPeer(peerId)) { "Peer was not discovered" }
         require(peer.availability == PeerAvailability.ONLINE) { "Peer is offline" }
         val localIdentity = localIdentityService.get()
         val recipientIdentity = requireNotNull(trustedIdentityRepository.find(peerId)) { "Peer is not trusted" }
         val totalBytes = source.length()
-        var transferredBytes = 0L
         var confirmedBytes = 0L
         client.webSocket(host = peer.host, port = peer.port, path = CHAT_PATH) {
             val startResponse = exchangeFrame(
@@ -725,7 +930,7 @@ class SubnetDropTransport(
                     type = FrameType.FILE_STREAM_START,
                     sender = localIdentity,
                     recipient = recipientIdentity,
-                    payload = json.encodeToString(FileStreamStartPayload(transferId)),
+                    payload = json.encodeToString(FileStreamStartPayload(transferId, uploadToken)),
                 ),
             )
             verifyDeliveryAck(
@@ -734,41 +939,32 @@ class SubnetDropTransport(
                 recipientIdentity,
                 localIdentity.deviceId,
             )
-            val digest = withContext(Dispatchers.IO) {
-                val messageDigest = MessageDigest.getInstance("SHA-256")
-                source.inputStream().buffered(FILE_CHUNK_SIZE_BYTES).use { input ->
-                    while (transferredBytes < totalBytes) {
-                        if (isTransferCancelled(transferId)) throw TransferCancelledException()
-                        val expectedBytes = minOf(
-                            FILE_CHUNK_SIZE_BYTES.toLong(),
-                            totalBytes - transferredBytes,
-                        ).toInt()
-                        val bytes = input.readExactChunk(expectedBytes)
-                        send(Frame.Binary(fin = true, data = bytes))
-                        messageDigest.update(bytes)
-                        transferredBytes += bytes.size
-                        if (transferredBytes - confirmedBytes >= FILE_PROGRESS_WINDOW_BYTES) {
-                            confirmedBytes = synchronizeFileProgress(
-                                transferId = transferId,
-                                transferredBytes = transferredBytes,
-                                localIdentity = localIdentity,
-                                recipientIdentity = recipientIdentity,
-                            )
-                        }
-                    }
-                    if (isTransferCancelled(transferId)) throw TransferCancelledException()
-                    require(source.length() == totalBytes) { "Selected file changed during transfer" }
-                }
-                messageDigest.digest().toHex()
-            }
-            if (confirmedBytes != transferredBytes) {
-                synchronizeFileProgress(
+            val httpUpload = async {
+                uploadFileOverHttp(
+                    peer = peer,
                     transferId = transferId,
-                    transferredBytes = transferredBytes,
+                    uploadToken = uploadToken,
+                    source = source,
                     localIdentity = localIdentity,
                     recipientIdentity = recipientIdentity,
                 )
             }
+            while (confirmedBytes < totalBytes) {
+                val rawFrame = withTimeout(FILE_PROGRESS_TIMEOUT_MS) { incoming.receive() }
+                val frame = rawFrame as? Frame.Text ?: error("Peer returned a non-text file progress frame")
+                val progress = json.decodeFromString<TransportFrame>(frame.readText()).also(::throwIfError)
+                val receivedBytes = verifyFileProgress(
+                    frame = progress,
+                    transferId = transferId,
+                    previousBytes = confirmedBytes,
+                    totalBytes = totalBytes,
+                    senderIdentity = recipientIdentity,
+                    localDeviceId = localIdentity.deviceId,
+                )
+                confirmedBytes = receivedBytes
+                updateTransfer(transferId) { transfer -> transfer.copy(transferredBytes = receivedBytes) }
+            }
+            val digest = withTimeout(EXCHANGE_TIMEOUT_MS) { httpUpload.await() }
             val completionResponse = exchangeFrame(
                 createSignedFileFrame(
                     type = FrameType.FILE_STREAM_COMPLETE,
@@ -786,33 +982,83 @@ class SubnetDropTransport(
         }
     }
 
-    private suspend fun WebSocketSession.synchronizeFileProgress(
+    private suspend fun uploadFileOverHttp(
+        peer: Peer,
         transferId: String,
-        transferredBytes: Long,
+        uploadToken: String,
+        source: File,
         localIdentity: PublicIdentity,
         recipientIdentity: PublicIdentity,
-    ): Long {
-        val response = exchangeFrame(
-            request = createSignedFileFrame(
-                type = FrameType.FILE_STREAM_PROGRESS,
-                sender = localIdentity,
-                recipient = recipientIdentity,
-                payload = json.encodeToString(FileStreamProgressPayload(transferId, transferredBytes)),
+    ): String {
+        val totalBytes = source.length()
+        val digest = MessageDigest.getInstance("SHA-256")
+        var streamedBytes = 0L
+        val requestSignature = Base64.getEncoder().encodeToString(
+            secureMessageCodec.sign(
+                httpUploadSigningData(
+                    senderId = localIdentity.deviceId,
+                    recipientId = recipientIdentity.deviceId,
+                    transferId = transferId,
+                    uploadToken = uploadToken,
+                    contentLength = totalBytes,
+                ),
             ),
-            timeoutMillis = FILE_PROGRESS_TIMEOUT_MS,
         )
-        verifyFileProgress(response, transferId, transferredBytes, recipientIdentity, localIdentity.deviceId)
-        updateTransfer(transferId) { transfer -> transfer.copy(transferredBytes = transferredBytes) }
-        return transferredBytes
+        val response = client.put {
+            url {
+                protocol = URLProtocol.HTTP
+                host = peer.host
+                port = peer.port
+                path(FILE_UPLOAD_PATH)
+            }
+            headers {
+                append(HttpHeaders.Authorization, "$BEARER_PREFIX$uploadToken")
+                append(HEADER_TRANSFER_ID, transferId)
+                append(HEADER_SENDER_ID, localIdentity.deviceId)
+                append(HEADER_UPLOAD_SIGNATURE, requestSignature)
+            }
+            setBody(object : OutgoingContent.WriteChannelContent() {
+                override val contentType: ContentType = ContentType.Application.OctetStream
+                override val contentLength: Long = totalBytes
+
+                override suspend fun writeTo(channel: ByteWriteChannel) {
+                    withContext(Dispatchers.IO) {
+                        val buffer = ByteArray(FILE_IO_BUFFER_SIZE_BYTES)
+                        source.inputStream().use { input ->
+                            while (true) {
+                                if (isTransferCancelled(transferId)) throw TransferCancelledException()
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                if (count == 0) continue
+                                require(streamedBytes + count <= totalBytes) { "Selected file grew during transfer" }
+                                channel.writeFully(buffer, 0, count)
+                                digest.update(buffer, 0, count)
+                                streamedBytes += count
+                            }
+                        }
+                        channel.flush()
+                    }
+                }
+            })
+        }
+        val responseText = response.bodyAsText()
+        require(response.status == HttpStatusCode.Accepted) {
+            "HTTP ${response.status.value}: ${responseText.ifBlank { "File upload failed" }}"
+        }
+        require(streamedBytes == totalBytes && source.length() == totalBytes) {
+            "Selected file changed during transfer"
+        }
+        return digest.digest().toHex()
     }
 
     private fun verifyFileProgress(
         frame: TransportFrame,
         transferId: String,
-        expectedBytes: Long,
+        previousBytes: Long,
+        totalBytes: Long,
         senderIdentity: PublicIdentity,
         localDeviceId: String,
-    ) {
+    ): Long {
         validateFrame(frame)
         require(frame.type == FrameType.FILE_STREAM_PROGRESS) { "Peer did not confirm file progress" }
         require(frame.senderId == senderIdentity.deviceId && frame.recipientId == localDeviceId) {
@@ -820,15 +1066,22 @@ class SubnetDropTransport(
         }
         val progress = decodeSignedFilePayload<FileStreamProgressPayload>(frame, senderIdentity)
         require(progress.transferId == transferId) { "File progress transfer does not match" }
-        require(progress.receivedBytes == expectedBytes) { "Peer confirmed unexpected file progress" }
+        require(progress.receivedBytes in (previousBytes + 1)..totalBytes) {
+            "Peer confirmed unexpected file progress"
+        }
+        return progress.receivedBytes
     }
 
-    private suspend fun sendFileDecision(offer: IncomingFileOffer, accepted: Boolean) {
+    private suspend fun sendFileDecision(
+        offer: IncomingFileOffer,
+        accepted: Boolean,
+        uploadToken: String?,
+    ) {
         sendSignedFileRequest(
             peerId = offer.peerId,
             type = FrameType.FILE_DECISION,
             acknowledgementId = offer.transferId,
-            payload = json.encodeToString(FileDecisionPayload(offer.transferId, accepted)),
+            payload = json.encodeToString(FileDecisionPayload(offer.transferId, accepted, uploadToken)),
         )
     }
 
@@ -891,56 +1144,10 @@ class SubnetDropTransport(
         }
     }
 
-    private suspend fun appendIncomingBytes(
-        peerId: String,
-        transferId: String,
-        bytes: ByteArray,
-    ) {
-        val sessionMutex = transferMutex.withLock {
-            require(bytes.isNotEmpty() && bytes.size <= FILE_CHUNK_SIZE_BYTES) { "File chunk has invalid size" }
-            val session = incomingSessions[transferId] ?: error("Transfer session was not accepted")
-            require(session.peerId == peerId) { "Transfer peer mismatch" }
-            require(session.target != null) { "Transfer session was not accepted" }
-            require(transferId !in cancelledTransfers) { "Transfer was cancelled" }
-            session.ioMutex
-        }
-        sessionMutex.withLock {
-            val session = transferMutex.withLock {
-                val current = incomingSessions[transferId] ?: error("Transfer session was not accepted")
-                require(current.ioMutex === sessionMutex) { "Transfer session changed" }
-                require(transferId !in cancelledTransfers) { "Transfer was cancelled" }
-                current
-            }
-            val remainingBytes = session.size - session.receivedBytes
-            require(remainingBytes > 0) { "File contains more bytes than offered" }
-            require(bytes.size.toLong() <= remainingBytes) { "File contains more bytes than offered" }
-            val reachesEnd = bytes.size.toLong() == remainingBytes
-            if (!reachesEnd) require(bytes.size == FILE_CHUNK_SIZE_BYTES) { "Non-final file chunk has invalid size" }
-            withContext(Dispatchers.IO) {
-                val buffer = Buffer().apply { write(bytes) }
-                requireNotNull(session.target).outputSink
-                    .write(buffer, bytes.size.toLong())
-                session.digest.update(bytes)
-            }
-            transferMutex.withLock {
-                val current = incomingSessions[transferId] ?: error("Transfer session was cancelled")
-                require(current.ioMutex === sessionMutex) { "Transfer session changed" }
-                require(current.receivedBytes == session.receivedBytes) { "File chunks arrived out of order" }
-                incomingSessions[transferId] = current.copy(
-                    receivedBytes = current.receivedBytes + bytes.size,
-                )
-            }
-        }
-    }
-
     private suspend fun failIncomingUpload(transferId: String, exception: Exception) {
         discardIncomingSession(transferId)
-        updateTransfer(transferId) { transfer ->
-            if (transfer.status == FileTransferStatus.TRANSFERRING) {
-                transfer.copy(status = FileTransferStatus.FAILED, error = exception.message ?: "File upload failed")
-            } else {
-                transfer
-            }
+        updateTransferIfActive(transferId) { transfer ->
+            transfer.copy(status = FileTransferStatus.FAILED, error = exception.message ?: "File upload failed")
         }
     }
 
@@ -964,7 +1171,7 @@ class SubnetDropTransport(
                             "Stored file size $persistedSize does not match offered size ${session.size}"
                         }
                     }
-                    require(session.digest.digest().toHex() == expectedSha256) {
+                    require(session.receivedSha256 == expectedSha256) {
                         "Received file checksum does not match sender"
                     }
                     target.publish()
@@ -986,7 +1193,7 @@ class SubnetDropTransport(
         }
     }
 
-    private suspend fun prepareIncomingTransfer(offer: IncomingFileOffer) {
+    private suspend fun prepareIncomingTransfer(offer: IncomingFileOffer): String {
         val session = createIncomingSession(offer)
         updateTransfer(offer.transferId) {
             it.copy(
@@ -994,6 +1201,7 @@ class SubnetDropTransport(
                 localPath = requireNotNull(session.target).temporaryPath,
             )
         }
+        return requireNotNull(session.uploadToken)
     }
 
     private suspend fun createIncomingSession(offer: IncomingFileOffer): IncomingSession {
@@ -1012,7 +1220,11 @@ class SubnetDropTransport(
             transferMutex.withLock {
                 val current = requireNotNull(incomingSessions[offer.transferId]) { "Transfer offer no longer exists" }
                 require(current.target == null) { "Transfer session was already accepted" }
-                current.copy(target = target).also { incomingSessions[offer.transferId] = it }
+                current.copy(
+                    target = target,
+                    uploadToken = newUploadToken(),
+                    uploadTokenExpiresAt = timestampProvider.nowMillis() + UPLOAD_TOKEN_TTL_MS,
+                ).also { incomingSessions[offer.transferId] = it }
             }
         } catch (exception: Exception) {
             target.discard()
@@ -1034,7 +1246,10 @@ class SubnetDropTransport(
     }
 
     private suspend fun discardIncomingSession(transferId: String) {
-        val session = transferMutex.withLock { incomingSessions.remove(transferId) }
+        val session = transferMutex.withLock {
+            incomingUploadControls.remove(transferId)
+            incomingSessions.remove(transferId)
+        }
         session?.ioMutex?.withLock {
             session.target?.discard()
         }
@@ -1046,8 +1261,11 @@ class SubnetDropTransport(
             cancelledTransfers += mutableTransfers.value
                 .filter { it.status.isActive() }
                 .map(FileTransfer::id)
-            pendingDecisions.values.forEach { it.complete(false) }
+            pendingDecisions.forEach { (transferId, decision) ->
+                decision.complete(FileDecisionPayload(transferId, false, null))
+            }
             incomingSessions.clear()
+            incomingUploadControls.clear()
             mutableIncomingOffers.value = emptyList()
             mutableTransfers.value = mutableTransfers.value.map { transfer ->
                 if (transfer.status.isActive()) transfer.copy(status = FileTransferStatus.CANCELLED) else transfer
@@ -1128,24 +1346,30 @@ class SubnetDropTransport(
 
     private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte) }
 
-    private fun java.io.InputStream.readExactChunk(expectedBytes: Int): ByteArray {
-        if (expectedBytes == 0) return ByteArray(0)
-        val result = ByteArray(expectedBytes)
-        var offset = 0
-        while (offset < expectedBytes) {
-            val count = read(result, offset, expectedBytes - offset)
-            require(count >= 0) { "Selected file changed during transfer" }
-            offset += count
-        }
-        return result
-    }
-
     private fun filePayloadSigningData(
         type: FrameType,
         senderId: String,
         recipientId: String,
         payload: String,
     ): ByteArray = "FILE|$PROTOCOL_VERSION|${type.name}|$senderId|$recipientId|$payload".encodeToByteArray()
+
+    private fun httpUploadSigningData(
+        senderId: String,
+        recipientId: String,
+        transferId: String,
+        uploadToken: String,
+        contentLength: Long,
+    ): ByteArray =
+        "HTTP_UPLOAD|$PROTOCOL_VERSION|$senderId|$recipientId|$transferId|$uploadToken|$contentLength"
+            .encodeToByteArray()
+
+    private fun validateUploadToken(uploadToken: String) {
+        require(UPLOAD_TOKEN_REGEX.matches(uploadToken)) { "Invalid upload token" }
+    }
+
+    private fun newUploadToken(): String = ByteArray(UPLOAD_TOKEN_SIZE_BYTES)
+        .also(secureRandom::nextBytes)
+        .let(Base64.getUrlEncoder().withoutPadding()::encodeToString)
 
     private fun streamStartAckId(transferId: String): String = "$transferId:start"
 
@@ -1296,9 +1520,12 @@ class SubnetDropTransport(
         val fileName: String,
         val contentType: String?,
         val size: Long,
-        val digest: MessageDigest,
         val target: IncomingFileTarget? = null,
+        val uploadToken: String? = null,
+        val uploadTokenExpiresAt: Long? = null,
+        val uploadStarted: Boolean = false,
         val receivedBytes: Long = 0,
+        val receivedSha256: String? = null,
         val ioMutex: Mutex = Mutex(),
     ) {
         companion object {
@@ -1308,7 +1535,6 @@ class SubnetDropTransport(
                 fileName = offer.fileName,
                 contentType = offer.contentType,
                 size = offer.size,
-                digest = MessageDigest.getInstance("SHA-256"),
             )
         }
     }
@@ -1318,6 +1544,21 @@ class SubnetDropTransport(
         val localIdentity: PublicIdentity,
         val senderIdentity: PublicIdentity,
     )
+
+    private data class IncomingUploadControl(
+        val upload: IncomingUpload,
+        val session: DefaultWebSocketServerSession,
+    )
+
+    private data class AuthenticatedHttpUpload(
+        val session: IncomingSession,
+        val control: IncomingUploadControl,
+    )
+
+    private class HttpUploadException(
+        val status: HttpStatusCode,
+        message: String,
+    ) : IllegalArgumentException(message)
 
     private class TransferCancelledException : Exception()
 
@@ -1331,14 +1572,20 @@ class SubnetDropTransport(
         const val DEFAULT_PORT = 45_892
         const val LISTEN_HOST = "0.0.0.0"
         const val CHAT_PATH = "/chat"
-        const val PROTOCOL_VERSION = 1
+        const val FILE_UPLOAD_PATH = "/api/files/upload"
+        const val PROTOCOL_VERSION = 2
         const val MAX_FRAME_SIZE_BYTES = 1L * 1_024L * 1_024L
         const val MAX_FRAME_TEXT_LENGTH = 64 * 1_024
         const val MAX_READ_RECEIPT_MESSAGE_COUNT = 128
-        const val FILE_CHUNK_SIZE_BYTES = 512 * 1_024
+        const val FILE_IO_BUFFER_SIZE_BYTES = 512 * 1_024
         const val FILE_PROGRESS_WINDOW_BYTES = 4L * 1_024L * 1_024L
-        const val FILE_FRAME_QUEUE_CAPACITY = 2
         const val CONTROL_FRAME_QUEUE_CAPACITY = 16
+        const val UPLOAD_TOKEN_SIZE_BYTES = 32
+        const val UPLOAD_TOKEN_TTL_MS = 5 * 60 * 1_000L
+        const val BEARER_PREFIX = "Bearer "
+        const val HEADER_TRANSFER_ID = "X-SubnetDrop-Transfer-Id"
+        const val HEADER_SENDER_ID = "X-SubnetDrop-Sender-Id"
+        const val HEADER_UPLOAD_SIGNATURE = "X-SubnetDrop-Signature"
         const val MAX_FILE_NAME_LENGTH = 255
         const val MIN_PRINTABLE_CHARACTER_CODE = 32
         const val EVENT_BUFFER_SIZE = 64
@@ -1350,5 +1597,6 @@ class SubnetDropTransport(
         const val SHUTDOWN_TIMEOUT_MS = 2_000L
         val ID_REGEX = Regex("^[A-Za-z0-9._:-]{1,128}$")
         val SHA256_REGEX = Regex("^[a-f0-9]{64}$")
+        val UPLOAD_TOKEN_REGEX = Regex("^[A-Za-z0-9_-]{43}$")
     }
 }

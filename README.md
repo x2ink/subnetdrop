@@ -22,9 +22,9 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 - **可靠一对一聊天**：支持本地历史、文字选择复制、幂等去重、失败重试、签名送达 ACK、未读计数和签名已读回执。
 - **可控设备记录**：Android 长按、桌面右键即可删除附近设备；可选择同时清理聊天数据库，已保存的实体文件不受影响。
 - **消息式高速传文件**：单次可选择多个文件，最多 3 个并行传输；文件卡片与文字一起排列并持久化在聊天时间线中，
-  默认自动接收，也可开启逐文件确认；4 MiB 接收确认窗口同步两端进度，有界队列避免整文件堆入内存，保存目录和
-  1–1024 GiB 单文件上限可配置。
-- **系统文件体验**：接收完成后可从消息卡片调用系统默认应用打开，传输使用 512 KiB 原始二进制分块并做长度与 SHA-256 验证。
+  默认自动接收，也可开启逐文件确认；文件正文通过独立 HTTP/1.1 请求持续流式发送，WebSocket 异步同步接收端
+  确认进度，保存目录和 1–1024 GiB 单文件上限可配置。
+- **系统文件体验**：接收完成后可从消息卡片调用系统默认应用打开，传输全程保持有界内存并做长度与 SHA-256 验证。
 - **失效状态可见**：重启后仍可查看文件消息；本地文件被移动或删除时，消息卡片明确显示“已失效”。
 - **共享跨平台 UI**：Compose Multiplatform Material 3 统一实现；首页只保留“附近设备 / 设置”，聊天从设备项直接进入，
   同时适配紧凑导航和桌面双栏布局。
@@ -54,7 +54,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 | 设计系统 | Material 3 | 1.11.0-alpha07 | 主题、组件、图标与响应式布局 |
 | 导航 | Compose Navigation 3 | 1.1.1 | 紧凑窗口下的类型化页面栈 |
 | 依赖注入 | Koin | 4.2.1 | 构造函数注入与平台组合根 |
-| 网络 | Ktor | 3.5.2 | CIO 服务端、客户端和 WebSocket 点对点传输 |
+| 网络 | Ktor | 3.5.2 | CIO HTTP/1.1 Streaming、WebSocket 控制与点对点传输 |
 | 序列化与异步 | kotlinx.serialization / Coroutines | 1.11.0 | 严格 JSON 协议和结构化并发 |
 | 本地数据库 | SQLDelight | 2.3.2 | 类型安全 SQLite、会话、信任和消息状态 |
 | 密码学 | Google Tink | 1.23.0 | HPKE 与 Ed25519，不自行实现密码算法 |
@@ -85,14 +85,15 @@ flowchart LR
 |---|---|
 | `:core` | 领域模型、端口和用例，不依赖 UI、数据库、网络或 DI 框架 |
 | `:data` | SQLDelight schema，以及聊天、设备和信任仓库适配器 |
-| `:network` | UDP 组播发现、稳定设备身份、配对、Tink 加密和 Ktor WebSocket 传输 |
+| `:network` | UDP 组播发现、稳定设备身份、配对、Tink 加密、WebSocket 控制和 HTTP 文件流 |
 | `:app:shared` | Compose UI、Navigation 3、FileKit、ViewModel、Koin 公共组合和运行时编排 |
 | `:app:androidApp` | Android 入口、权限、Keystore、Wi-Fi multicast lock 和进程生命周期 |
 | `:app:desktopApp` | macOS/Windows 入口、系统凭据存储、窗口和原生安装包 |
 
 一次完整连接并不是把 IP 地址当作身份：UDP 公告只提供候选地址，WebSocket PONG 确认当前可达；稳定
 `deviceId` 与经人工确认的公钥才构成
-设备身份。聊天和文件共用协议版本 1 与 `/chat` WebSocket 端点，默认监听 TCP `45892`。
+设备身份。传输帧协议版本为 2；聊天和文件控制使用 `/chat` WebSocket，文件正文使用
+`PUT /api/files/upload` HTTP/1.1 Streaming。两者监听同一个 TCP `45892`，但使用彼此独立的连接。
 
 详细原理：
 
@@ -154,9 +155,10 @@ Debug APK、Windows x64 MSI、Windows x64 便携 ZIP、macOS Apple Silicon DMG �
 
 ## 安全与隐私边界
 
-- 聊天正文使用 HPKE 端到端加密；文件内容为局域网明文二进制流，文件控制帧、ACK 和已读回执由 Ed25519 签名。
+- 聊天正文使用 HPKE 端到端加密；文件内容为局域网明文流，HTTP 上传元数据、文件控制帧、ACK 和已读回执由
+  Ed25519 签名。
 - 私钥保存在 Android Keystore 或桌面系统凭据存储中，不写入 SQLite。
-- 接收文件先写临时文件，仅在顺序、总长度和 SHA-256 全部通过后发布到下载目录。
+- 接收文件先写临时文件，仅在声明总长度和 SHA-256 全部通过后发布到下载目录。
 - 默认自动接收意味着已信任设备可以主动占用本机带宽和磁盘；可在设置中开启逐文件确认。
 - 当前 SQLite 中的聊天正文仍是本地明文；“传输端到端加密”不等于“数据库静态加密”。
 - 当前 HPKE 方案不声明前向保密；未来若引入 Noise / Double Ratchet，需要升级协议而不是静默替换。
@@ -170,6 +172,7 @@ Debug APK、Windows x64 MSI、Windows x64 便携 ZIP、macOS Apple Silicon DMG �
 - 完成 macOS 签名与公证，并验证发布身份下的 Keychain 隔离。
 - 加密本地消息正文，补充密钥轮换与数据库迁移设计。
 - 拆分当前传输实现中的聊天、配对和文件会话职责，不改变协议行为。
+- 在相同网络与文件上记录 `iperf3`、旧 WebSocket 数据面和新 HTTP Streaming 数据面的阶段吞吐。
 - 对外发布前补充明确的开源许可证；当前仓库尚未包含 `LICENSE` 文件。
 
 ## 文档

@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class TransportFrame(
-    val protocolVersion: Int = 1,
+    val protocolVersion: Int = 2,
     val type: FrameType,
     val senderId: String,
     val recipientId: String,
@@ -60,11 +60,13 @@ data class FileOfferPayload(
 data class FileDecisionPayload(
     val transferId: String,
     val accepted: Boolean,
+    val uploadToken: String?,
 )
 
 @Serializable
 data class FileStreamStartPayload(
     val transferId: String,
+    val uploadToken: String,
 )
 
 @Serializable

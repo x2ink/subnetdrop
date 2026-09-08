@@ -30,18 +30,19 @@ sequenceDiagram
     R->>S: Signed FILE_DECISION
     S-->>R: Signed DELIVERY_ACK
     alt accepted
-        S->>R: Open one upload WebSocket
-        S->>R: Signed FILE_STREAM_START
-        loop Ordered 512 KiB chunks
-            S->>R: Plain binary frame
+        S->>R: Open one file-control WebSocket
+        S->>R: Signed FILE_STREAM_START with one-time token
+        S->>R: Signed HTTP PUT with exact Content-Length
+        loop Continuous HTTP request body
+            S->>R: Plain file bytes
             S->>S: Update SHA-256
-            R->>R: Validate byte count and update SHA-256
-            opt Every 4 MiB window
-                S->>R: Signed progress checkpoint
-                R-->>S: Signed confirmed written bytes
+            R->>R: Write temporary file and update SHA-256
+            opt Every 4 MiB written
+                R-->>S: Signed confirmed bytes over WebSocket
                 S->>S: Publish receiver-confirmed progress
             end
         end
+        R-->>S: HTTP 202 after exact body is stored
         S->>R: Signed FILE_STREAM_COMPLETE with SHA-256
         R->>R: Verify byte count and SHA-256
         R->>R: Rename temporary file to final collision-free name
@@ -94,19 +95,22 @@ stateDiagram-v2
 | 信任 | 只允许 `TRUSTED` peer |
 | 单次会话 | 1 个文件 |
 | 最大文件 | 每台设备独立配置 1–1024 GiB，默认 10 GiB |
-| 明文分块 | 512 KiB 原始二进制帧 |
-| 进度窗口 | 每 4 MiB 由接收端签名确认，尾段在完成前补确认 |
-| 内存背压 | WebSocket 文件帧队列容量为 2，不允许整文件排入内存 |
+| 数据通道 | 每文件一个带准确 `Content-Length` 的 HTTP/1.1 PUT 请求 |
+| 上传认证 | 五分钟有效、仅使用一次的 32 字节随机 Token + Ed25519 请求签名 |
+| I/O 缓冲 | 每条发送和接收流复用 512 KiB 数组，不是协议分块 |
+| 进度上报 | 接收端每累计写入 4 MiB 异步签名上报，不阻塞 HTTP 正文 |
+| 内存背压 | 由 Ktor ByteChannel 与 TCP 背压限制，不允许整文件排入内存 |
 | 文件名 | 最长 255 字符，只允许 leaf name，拒绝路径分隔符、控制字符和空名 |
-| 顺序 | 依赖单一 WebSocket 的有序传输，不允许超出声明总量 |
+| 顺序 | 依赖单一 HTTP 请求体的有序字节流，不允许超出声明总量 |
 | 总量 | 不得超过 offer 声明字节数 |
 | 完成条件 | 实际字节数与 SHA-256 都匹配 |
 | 冲突 | 保留已有文件，生成不冲突的最终名称 |
 
-发送侧边读边发并流式计算哈希，不在发送前预扫描文件。Ktor 3.5 的 WebSocket 收发队列默认无界，因此文件通道
-显式限制为 2 帧；当手机写盘变慢时，背压会沿服务端接收队列、TCP 和客户端发送队列传回源文件读取，不再把大文件
-提前堆入内存。接收侧在 IO dispatcher 上按每个文件独立串行写临时文件并计算摘要，不持有全局传输锁；三路并行
-文件不会因其中一路磁盘写入而全部串行。拒绝、取消、超时、越界或摘要不匹配都必须删除临时数据。
+发送侧使用 Ktor `WriteChannelContent` 边读边写 HTTP 正文并同步更新摘要，不在发送前预扫描文件。接收侧通过
+`receiveChannel()` 持续消费正文，一个文件只创建一个 buffered Sink、一个摘要器和一个 512 KiB 可复用数组。
+当手机写盘变慢时，背压会沿接收 ByteChannel、TCP 和发送 ByteChannel 传回源文件读取，不会把大文件提前堆入
+内存。写盘与摘要计算在 IO dispatcher 上按文件独立串行执行，不持有全局传输锁，三路并行不会因其中一路写盘
+而全部串行。拒绝、取消、超时、越界或摘要不匹配都必须删除临时数据。
 
 ## 平台文件边界
 
@@ -125,15 +129,15 @@ stateDiagram-v2
 - 接收完成并通过长度与 SHA-256 校验后，文件消息可调用系统默认应用打开；发送侧打开原始源文件。
 - 完成、拒绝、取消和失败的文件消息持久化到 SQLDelight；完成项保存本地路径，重启后仍会出现在聊天时间线。
 - 文件卡片组合时和打开前都会重新检查本地路径；文件被删除或移动后显示“已失效”，且不会调用系统打开器。
-- 发送端不再把“已排入本机 WebSocket 队列”误报为传输进度。每发送 4 MiB 后在同一有序连接插入签名检查点；
-  接收端只有写盘完成且检查点字节数等于实际累计值时才签名回应，双方消息卡片发布同一个确认值。尾段也会在完成帧
-  前确认，因此发送端不会在接收端仍落后几十 MiB 时提前显示 100%。
+- 发送端不把“已写入本机 HTTP 通道”误报为传输进度。接收端每实际写入 4 MiB 后通过控制 WebSocket 异步发送
+  签名累计值，双方消息卡片以这个值为准；HTTP 正文无需等待进度回应，完成校验后双方才收敛到 100%。
 
 ## 安全与性能取舍
 
-文件内容不做 HPKE 加密，不进行 Base64/JSON 转换，也不为每个 512 KiB 分块等待网络 ACK。4 MiB 累计确认把一次
-往返成本摊到 8 个数据帧，并同时限制进度漂移与内存占用。文件会话的提议、决策、进度、开始和完成帧使用 Ed25519
-认证，最终摘要能发现内容被篡改，但局域网观察者仍可能读取文件原文。这是为最大化吞吐而明确接受的产品取舍。
+文件内容不做 HPKE 加密，不进行 Base64/JSON 转换，也不等待应用层分块 ACK。HTTP/1.1 只承担连续字节流和标准
+背压；WebSocket 只承担签名控制事件和异步进度。接收决策签发的一次性 Token 有五分钟有效期，HTTP 请求签名把
+协议版本、双方身份、传输 ID、Token 与长度绑定，Token 被使用一次后立即失效。最终摘要能发现内容被篡改，但
+局域网观察者仍可能读取文件原文和 HTTP 元数据，这是为吞吐明确接受的产品取舍。
 
 默认自动接收还意味着可信对端可以主动占用接收方带宽和磁盘。对这一策略不满意的用户应开启逐文件确认；无论
 采用哪种策略，文件大小上限、文件名校验、顺序校验和最终摘要校验都保持不变。

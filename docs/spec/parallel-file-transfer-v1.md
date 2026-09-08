@@ -3,8 +3,9 @@
 ## Goal
 
 Allow one file-picker action to enqueue multiple files, transfer a bounded number concurrently, and display independent
-live progress for every file on both peers. This increment keeps the existing authenticated WebSocket data channel;
-resumable HTTP sessions are a separate protocol revision because they require persistent partial-session state.
+live progress for every file on both peers. Each accepted file has an independent HTTP/1.1 streaming data request and
+WebSocket control connection. Resumable upload remains a separate revision because it requires persistent partial-session
+state and byte-range authorization.
 
 ## Product contract
 
@@ -41,18 +42,17 @@ flowchart LR
     B --> Slots
     C --> Slots
     D --> Slots
-    Slots --> WA[Independent WebSocket A]
-    Slots --> WB[Independent WebSocket B]
-    Slots --> WC[Independent WebSocket C]
+    Slots --> WA[HTTP stream + control WS A]
+    Slots --> WB[HTTP stream + control WS B]
+    Slots --> WC[HTTP stream + control WS C]
     WA --> Sender[Sender StateFlow]
     WA --> Receiver[Receiver StateFlow]
 ```
 
-Each upload uses a 4 MiB progress window. The sender inserts a signed checkpoint after the preceding ordered binary frames;
-the receiver responds with its actual written byte count only when it matches that checkpoint. Both cards publish the
-receiver-confirmed value, so local WebSocket queueing cannot make the sender run ahead. This is one acknowledgement per
-eight 512 KiB chunks rather than a per-chunk round trip. File-frame queues are bounded and every incoming session owns its
-I/O lock, so three transfers retain TCP backpressure without serializing their disk writes behind one global mutex.
+The receiver publishes signed cumulative progress every 4 MiB over that file's control WebSocket while its HTTP body keeps
+flowing. Both cards therefore display receiver-written bytes without turning progress into a stop-and-wait protocol. Each
+request owns one reusable 512 KiB I/O buffer, buffered destination sink and per-file I/O lock. Three streams retain their
+own TCP backpressure and do not serialize disk writes behind one global mutex.
 
 ## Failure semantics
 

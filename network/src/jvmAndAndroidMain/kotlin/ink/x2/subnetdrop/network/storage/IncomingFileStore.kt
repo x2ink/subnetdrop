@@ -11,7 +11,8 @@ import io.github.vinceglb.filekit.sink
 import io.github.vinceglb.filekit.size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.io.RawSink
+import kotlinx.io.Sink
+import kotlinx.io.buffered
 
 interface IncomingFileStore {
     suspend fun create(
@@ -26,7 +27,7 @@ interface IncomingFileStore {
 interface IncomingFileTarget {
     val temporaryPath: String
     val finalPath: String
-    val outputSink: RawSink
+    val outputSink: Sink
 
     fun persistedSizeOrNull(): Long?
 
@@ -55,7 +56,7 @@ class FileKitIncomingFileStore : IncomingFileStore {
             FileKitIncomingFileTarget(
                 temporaryFile = temporaryFile,
                 finalFile = finalFile,
-                outputSink = temporaryFile.sink(),
+                outputSink = temporaryFile.sink().buffered(),
             )
         } catch (exception: Exception) {
             temporaryFile.delete(mustExist = false)
@@ -84,7 +85,7 @@ class FileKitIncomingFileStore : IncomingFileStore {
     private class FileKitIncomingFileTarget(
         private val temporaryFile: PlatformFile,
         private val finalFile: PlatformFile,
-        override val outputSink: RawSink,
+        override val outputSink: Sink,
     ) : IncomingFileTarget {
         override val temporaryPath: String = temporaryFile.path
         override val finalPath: String = finalFile.path

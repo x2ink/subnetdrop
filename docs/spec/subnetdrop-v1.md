@@ -7,8 +7,8 @@
 3. Support one-to-one text conversations with live delivery status.
 4. Store conversation history locally on each device.
 5. Encrypt message content for the intended peer and authenticate the sender.
-6. Transfer one file at a time using a high-speed binary stream and whole-file verification; default to automatic
-   acceptance while allowing the receiver to require confirmation in Settings.
+6. Transfer files through an independent HTTP/1.1 streaming data channel with whole-file verification; default to
+   automatic acceptance while allowing the receiver to require confirmation in Settings.
 7. Use Clean Architecture and Koin constructor injection.
 
 ## Non-goals
@@ -65,11 +65,11 @@ messages from `DELIVERED` to `READ`. Conversation summaries expose an unread cou
 
 ### File transfer
 
-The sender validates one selected file and sends signed metadata. By default, a trusted receiver prepares its configured
+The sender validates selected files and sends signed metadata. By default, a trusted receiver prepares its configured
 save directory and accepts automatically; users can enable per-file acceptance and configure a 1–1024 GiB per-file limit
-in Settings. Accepted content uses ordered plaintext 512 KiB binary frames over one WebSocket. Both sides calculate
-SHA-256 while streaming; the sender signs the final digest, and the receiver publishes the file only after byte-count and
-digest verification. Detailed limits are defined in
+in Settings. Accepted content uses one plaintext HTTP/1.1 streaming request per file, independently from its signed
+WebSocket control connection. Both sides calculate SHA-256 while streaming; the sender signs the final digest, and the
+receiver publishes the file only after byte-count and digest verification. Detailed limits are defined in
 [file-transfer-v1.md](file-transfer-v1.md).
 
 ## Domain model
@@ -109,7 +109,9 @@ digest verification. Detailed limits are defined in
 
 ## Wire protocol
 
-Every envelope contains `protocolVersion`, `type`, `messageId`, `senderId`, `recipientId`, and a type-specific payload. Parsers reject unknown major versions, oversized frames, invalid identifiers, unexpected recipients, invalid signatures, and malformed ciphertext.
+Every envelope contains `protocolVersion`, `type`, `senderId`, `recipientId`, and a type-specific payload. Version 2 adds
+the authenticated HTTP upload handshake. Parsers reject unknown major versions, oversized frames, invalid identifiers,
+unexpected recipients, invalid signatures, and malformed ciphertext.
 
 Initial frame types:
 
@@ -129,8 +131,8 @@ Initial frame types:
 
 Message IDs make receipt idempotent. The database has a unique constraint on message ID. An ACK is safe to send repeatedly.
 Pairing identities, routing fields, acknowledgement payloads and read-receipt message IDs are not encrypted. Chat content
-is HPKE encrypted. File control payloads are Ed25519-signed, while accepted file bytes use an unencrypted binary stream;
-the final signed SHA-256 digest detects modification but does not provide file confidentiality.
+is HPKE encrypted. File control payloads and HTTP upload metadata are Ed25519-signed, while accepted file bytes use an
+unencrypted HTTP body; the final signed SHA-256 digest detects modification but does not provide file confidentiality.
 
 ## Encryption
 

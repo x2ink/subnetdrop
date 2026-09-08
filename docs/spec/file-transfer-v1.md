@@ -56,8 +56,9 @@ interface FileTransferSettingsRepository {
 
 ## Protocol
 
-The protocol uses the existing Ktor WebSocket endpoint and trusted peer identities. Control requests use short-lived
-request/response sessions. After acceptance, all chunks for one file reuse a single upload session.
+Protocol version 2 separates the authenticated control plane from the file data plane. Offers, decisions, progress,
+cancellation and completion remain signed WebSocket frames. An accepted file is uploaded as one HTTP/1.1 request whose
+body is consumed and written continuously; HTTP and WebSocket listen on TCP port `45892` but use separate connections.
 
 ```mermaid
 sequenceDiagram
@@ -70,46 +71,51 @@ sequenceDiagram
     else Confirmation is enabled
         R->>R: User accepts or rejects
     end
-    R->>S: Signed FILE_DECISION
+    R->>S: Signed FILE_DECISION with short-lived one-time token
     S-->>R: Signed delivery ACK
-    S->>R: Open upload WebSocket
-    S->>R: Signed FILE_STREAM_START
-    loop Sequential 512 KiB chunks on the same connection
-        S->>R: Plain binary frame
+    S->>R: Open file-control WebSocket
+    S->>R: Signed FILE_STREAM_START with token
+    S->>R: PUT /api/files/upload with signed headers and Content-Length
+    loop Continuous HTTP request body
+        S->>R: Plain file bytes
         S->>S: Update SHA-256
-        R->>R: Validate byte count and update SHA-256
-        opt At each bounded progress window
-            S->>R: Signed FILE_STREAM_PROGRESS checkpoint
-            R-->>S: Signed FILE_STREAM_PROGRESS with confirmed bytes
+        R->>R: Write temporary file and update SHA-256
+        opt At each progress threshold
+            R-->>S: Signed FILE_STREAM_PROGRESS on WebSocket
             S->>S: Publish receiver-confirmed progress
         end
     end
+    R-->>S: HTTP 202 after exact body length is stored
     S->>R: Signed FILE_STREAM_COMPLETE with SHA-256
     R->>R: Verify total bytes and SHA-256, then rename temporary file
     R-->>S: Signed delivery ACK
 ```
 
-File control payloads are authenticated with Ed25519. File bytes are intentionally not encrypted: they are sent as raw
-binary WebSocket frames without Base64 conversion or per-chunk acknowledgement. Both devices calculate SHA-256 while
-streaming, and the signed completion frame binds the sender's final digest to the authenticated transfer. This detects
-modification but does not hide the file from an observer on the same network.
+The receiver generates a 32-byte URL-safe random token only after accepting an offer. The token expires after five minutes,
+can start only one upload, and is repeated in the signed decision, signed stream-start frame and HTTP bearer credential.
+The HTTP request also carries an Ed25519 signature over protocol version, sender, receiver, transfer ID, token and declared
+`Content-Length`. A copied token alone therefore cannot authorize another identity, transfer or body length.
 
-The sender must not expose bytes merely queued in its local WebSocket channel as delivered progress. After each 4 MiB
-window, it sends a signed progress checkpoint on the ordered upload connection. The receiver acknowledges only when all
-preceding chunks have been validated and written to the temporary-file sink. Both cards then publish that confirmed byte
-count. This bounds drift and memory without adding a round trip for every 512 KiB chunk. Client outgoing and server incoming
-WebSocket queues are bounded so TCP backpressure reaches the source reader instead of buffering an entire large file.
+File bytes are intentionally not encrypted and are not Base64 encoded. Both devices calculate SHA-256 while streaming, and
+the signed completion frame binds the sender's final digest to the authenticated transfer. This detects modification but
+does not hide the file or HTTP authorization metadata from an observer on the same network.
+
+The sender publishes only receiver-confirmed bytes. The receiver sends signed cumulative progress over the control
+WebSocket after each 4 MiB written threshold while the HTTP request continues independently; the sender never stops the
+file body to wait for an application-level checkpoint. Ktor channels and a reusable 512 KiB read/write buffer keep memory
+bounded, while TCP backpressure naturally slows the source reader when the receiver or network cannot keep up.
 
 ## Limits and validation
 
 - Trusted peers only.
 - One file per transfer session, up to 50 files per picker batch and three active outgoing sessions per process.
 - Configurable per-device file size: 1–1024 GiB, default 10 GiB. The 1024 GiB ceiling is also the protocol hard limit.
-- Binary chunk size: 512 KiB.
-- Progress acknowledgement window: 4 MiB, with a final checkpoint before completion when needed.
+- One HTTP/1.1 upload request per file, with a required and exact `Content-Length`.
+- Implementation I/O buffer: 512 KiB. It is not an application protocol frame or acknowledgement boundary.
+- Asynchronous progress threshold: 4 MiB, plus terminal convergence. It never pauses the HTTP body.
+- Upload authorization: 32-byte URL-safe one-time token, five-minute expiry, and Ed25519-signed request metadata.
 - Maximum file name length: 255 characters.
 - File names are reduced to a leaf name; path separators, blank names and control characters are rejected.
-- Chunks must arrive exactly once and in ascending order.
 - A transfer must not write more bytes than declared in its offer.
 - Rejected, cancelled, timed-out or invalid transfers delete their temporary data.
 - Existing destination files are preserved by selecting a collision-free final name.
@@ -136,8 +142,9 @@ WebSocket queues are bounded so TCP backpressure reaches the source reader inste
    the receiver can reject it without receiving file bytes.
 3. Both sides expose progress and terminal state.
 4. A successful receiver file has the exact byte count and SHA-256 digest of the source.
-5. Tampered, reordered, oversized and untrusted traffic is rejected without publishing a destination file.
-6. JVM unit/integration tests cover accepted multi-chunk transfer, rejection and tamper/order validation.
+5. Tampered, truncated, overlong and untrusted traffic is rejected without publishing a destination file.
+6. JVM integration tests cover authenticated streaming, missing authentication, changed source length, rejection,
+   receiver-confirmed progress and parallel transfers.
 7. Android, macOS and Windows file selection, destination handling and cross-platform transfer are verified on their
    target systems before release.
 8. The confirmation preference and save directory survive application restart.
