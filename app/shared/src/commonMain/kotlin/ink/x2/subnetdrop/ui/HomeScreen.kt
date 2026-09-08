@@ -1,5 +1,6 @@
 package ink.x2.subnetdrop.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -34,11 +36,14 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -309,23 +314,75 @@ private fun PeerRow(
                 )
             }
         }
-        DropdownMenu(
+        PeerActionMenu(
+            peer = peer,
             expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false },
-        ) {
-            DropdownMenuItem(
-                text = { Text(appString(AppString.DELETE_DEVICE)) },
-                leadingIcon = {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                },
-                onClick = {
-                    menuExpanded = false
-                    onDeleteRequested()
-                },
+            onDismiss = { menuExpanded = false },
+            onDeleteRequested = {
+                menuExpanded = false
+                onDeleteRequested()
+            },
+        )
+    }
+}
+
+@Composable
+private fun PeerActionMenu(
+    peer: Peer,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onDeleteRequested: () -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(min = 220.dp, max = 280.dp),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp,
+        shadowElevation = 8.dp,
+    ) {
+        PeerMenuHeader(peer)
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+        DropdownMenuItem(
+            text = {
+                Text(
+                    text = appString(AppString.DELETE_DEVICE),
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Medium,
+                )
+            },
+            leadingIcon = {
+                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            },
+            onClick = onDeleteRequested,
+        )
+    }
+}
+
+@Composable
+private fun PeerMenuHeader(peer: Peer) {
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PeerAvatar(peer.displayName, peer.availability == PeerAvailability.ONLINE)
+        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+            Text(
+                text = peer.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = peer.trustState.label(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -340,41 +397,108 @@ private fun DeletePeerDialog(
     var deleteHistory by remember(peer.id) { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { DeleteDialogIcon() },
         title = { Text(appString(AppString.DELETE_DEVICE_TITLE, peer.displayName)) },
         text = {
             Column {
-                Text(appString(AppString.DELETE_DEVICE_MESSAGE))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp)
-                        .clickable { deleteHistory = !deleteHistory },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = deleteHistory,
-                        onCheckedChange = { deleteHistory = it },
-                    )
-                    Column(Modifier.padding(start = 8.dp)) {
-                        Text(appString(AppString.DELETE_CHAT_HISTORY))
-                        Text(
-                            text = appString(AppString.DELETE_CHAT_HISTORY_DETAIL),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                Text(
+                    text = appString(AppString.DELETE_DEVICE_MESSAGE),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                DeleteHistoryOption(
+                    selected = deleteHistory,
+                    onSelectedChange = { deleteHistory = it },
+                )
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(deleteHistory) }) {
-                Text(appString(AppString.DELETE_DEVICE), color = MaterialTheme.colorScheme.error)
-            }
-        },
+        confirmButton = { DeleteConfirmButton { onConfirm(deleteHistory) } },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(appString(AppString.ACTION_CANCEL)) }
         },
     )
+}
+
+@Composable
+private fun DeleteDialogIcon() {
+    Surface(
+        modifier = Modifier.size(52.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeleteHistoryOption(selected: Boolean, onSelectedChange: (Boolean) -> Unit) {
+    val borderColor = if (selected) {
+        MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant
+    }
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clickable { onSelectedChange(!selected) },
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        border = BorderStroke(1.dp, borderColor),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = onSelectedChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.error,
+                    checkmarkColor = MaterialTheme.colorScheme.onError,
+                ),
+            )
+            Column(Modifier.padding(start = 8.dp).weight(1f)) {
+                Text(
+                    text = appString(AppString.DELETE_CHAT_HISTORY),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = appString(AppString.DELETE_CHAT_HISTORY_DETAIL),
+                    modifier = Modifier.padding(top = 2.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteConfirmButton(onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError,
+        ),
+    ) {
+        Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.size(8.dp))
+        Text(appString(AppString.DELETE_DEVICE))
+    }
 }
 
 @Composable

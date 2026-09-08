@@ -1,5 +1,12 @@
 # SubnetDrop 任务状态
 
+## 当前计划：附近设备删除菜单视觉优化
+
+- [x] 将单一删除项的上下文菜单补充为带设备身份和状态的紧凑 Material 3 菜单，强化操作归属。
+- [x] 重做删除确认 Dialog 的危险操作层级、历史记录选项卡片和按钮样式，保持默认不删除历史。
+- [x] 保持 Android 长按、桌面右键、普通点击及现有删除语义不变。
+- [x] 更新删除交互规格和验证记录，运行共享 JVM、桌面与 Android shared 编译，不安装 Android 应用。
+
 ## 当前计划：WebSocket 控制 + HTTP/1.1 Streaming 文件通道
 
 - [x] 更新文件传输规格与架构图，冻结控制面、HTTP 数据面、认证、进度和完成语义。
@@ -542,3 +549,9 @@ WebSocket 只保留控制和接收端异步进度。接收决策签发五分钟�
 计算 SHA-256，接收端通过校验后才发布临时文件；CIO 的 15 秒请求总超时对文件上传显式关闭，连接与无进度超时
 仍保留。12 项传输集成测试与完整 JVM/桌面/Android shared 回归通过，未安装 Android 应用；证据见
 [`verification/2026-09-08-http-streaming-file-transfer.md`](./verification/2026-09-08-http-streaming-file-transfer.md)。
+
+附近设备操作菜单不再只显示一个失去上下文的删除行：菜单顶部现在复用设备头像、在线标记、名称和信任状态，
+分隔线下方单独放置危险色删除操作。确认 Dialog 增加危险色图标容器和实色确认按钮，“同时删除聊天记录”改为
+带选中边框/底色的整行可点击选项卡，默认仍不勾选。删除数据语义和三语文案未改变；共享 JVM 测试、桌面与
+Android shared 编译通过，未安装 Android。桌面实际启动因已有实例占用 45892 端口而未执行视觉验收，未擅自
+关闭现有实例；记录见 [`verification/2026-09-08-peer-deletion.md`](./verification/2026-09-08-peer-deletion.md)。

@@ -43,3 +43,23 @@ git diff --check
 - 本轮未在 Android 真机执行长按，也未在 Windows 主机执行右键视觉验收；Android shared 和 macOS/Windows 共用
   Desktop 源码已编译，真实输入手势仍需目标设备交互验证。
 - 编译保留 `ChatScreen.kt` 既有 `quadraticBezierTo` 弃用警告，与本功能无关。
+
+## 删除交互视觉优化复核
+
+- 上下文菜单增加目标设备头像、在线标记、名称和信任状态，并以分隔线隔开危险操作。
+- 确认 Dialog 增加危险色图标与实色删除按钮；聊天历史选项使用整行可点击的 Material 3 Surface，选中后同步
+  改变边框和容器颜色，默认值仍为关闭。
+- Android 长按、桌面右键、普通点击以及删除数据库语义未改变，没有增加新的本地化资源键。
+
+执行：
+
+```shell
+./gradlew :app:shared:compileKotlinJvm :app:shared:compileAndroidMain \
+  :app:desktopApp:compileKotlin --no-configuration-cache --stacktrace
+./gradlew :app:shared:jvmTest --no-configuration-cache --stacktrace
+```
+
+最终结果分别为 `BUILD SUCCESSFUL in 4s` 和 `BUILD SUCCESSFUL in 1s`。Android shared 与桌面共用 UI 均编译成功，
+共享测试通过，未安装 Android 应用。尝试启动新的桌面开发实例进行视觉复核时，已有进程占用 TCP 45892，启动
+以 `BindException: Address already in use` 退出；未关闭用户现有实例，因此菜单和 Dialog 的实际像素效果仍需在
+当前运行实例更新后确认。

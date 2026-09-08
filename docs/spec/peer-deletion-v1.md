@@ -16,8 +16,9 @@ flowchart LR
     Dialog --> Purge[Delete device and chat history]
 ```
 
-操作菜单只提供“删除设备”。选择后必须再展示确认 Dialog；Dialog 默认不勾选“同时删除聊天记录”，避免误删历史。
-取消 Dialog 不产生任何持久化变化。
+操作菜单顶部展示目标设备头像、名称和当前信任状态，危险操作区只提供“删除设备”，避免菜单悬浮后失去操作归属。
+选择后必须再展示确认 Dialog；Dialog 使用危险色图标和确认按钮，并把“同时删除聊天记录”放在独立可点击选项卡中。
+该选项默认不勾选，避免误删历史；取消 Dialog 不产生任何持久化变化。
 
 ## Data semantics
 
