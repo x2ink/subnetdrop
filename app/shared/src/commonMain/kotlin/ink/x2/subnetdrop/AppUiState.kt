@@ -1,5 +1,6 @@
 package ink.x2.subnetdrop
 
+import ink.x2.subnetdrop.domain.model.AppLanguage
 import ink.x2.subnetdrop.domain.model.FileTransfer
 import ink.x2.subnetdrop.domain.model.FileTransferSettings
 import ink.x2.subnetdrop.domain.model.IncomingFileOffer
@@ -25,4 +26,5 @@ data class AppUiState(
     val storedFileMessages: List<FileTransfer>,
     val fileTransfers: List<FileTransfer>,
     val fileTransferSettings: FileTransferSettings,
+    val appLanguage: AppLanguage,
 )

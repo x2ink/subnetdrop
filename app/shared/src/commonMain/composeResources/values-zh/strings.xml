@@ -10,6 +10,12 @@
     <string name="refresh_nearby_devices">刷新附近设备</string>
     <string name="nearby_devices">附近设备</string>
     <string name="settings">设置</string>
+    <string name="app_language">应用语言</string>
+    <string name="select_app_language">选择应用语言</string>
+    <string name="language_system">跟随系统</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_english">English</string>
+    <string name="language_japanese">日本語</string>
     <string name="no_devices_title">暂未发现设备</string>
     <string name="no_devices_detail">请确认其他设备已打开 SubnetDrop 并连接同一 Wi-Fi。</string>
     <string name="delete_device">删除设备</string>
@@ -116,5 +122,7 @@
     <string name="receive_setting_update_failed">接收设置更新失败</string>
     <string name="max_file_size_update_failed">文件大小上限更新失败</string>
     <string name="max_file_size_updated">单文件大小上限已更新</string>
+    <string name="language_update_failed">更新应用语言失败</string>
+    <string name="language_updated">应用语言已更新</string>
     <string name="read_receipt_failed">发送已读回执失败</string>
 </resources>

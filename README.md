@@ -28,8 +28,8 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 - **失效状态可见**：重启后仍可查看文件消息；本地文件被移动或删除时，消息卡片明确显示“已失效”。
 - **共享跨平台 UI**：Compose Multiplatform Material 3 统一实现；首页只保留“附近设备 / 设置”，聊天从设备项直接进入，
   同时适配紧凑导航和桌面双栏布局。
-- **中英日三语**：共享界面支持英语、简体中文和日语，自动跟随 Android、macOS 或 Windows 的系统语言；
-  其他语言环境回退到英语。
+- **中英日三语**：共享界面支持英语、简体中文和日语，默认跟随 Android、macOS 或 Windows 的系统语言，也可在
+  设置中固定使用简体中文、English 或日本語；选择会在本地持久化，其他语言环境回退到英语。
 
 ## 平台适配状态
 
@@ -50,7 +50,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 |---|---|---:|---|
 | 语言与跨平台 | Kotlin Multiplatform | 2.4.10 | 共享领域、数据、网络和 UI 逻辑 |
 | UI | Compose Multiplatform | 1.11.1 | Android 与桌面共享声明式界面 |
-| 国际化 | Compose Multiplatform Resources | 1.11.1 | 共享三语资源、系统语言选择与英语回退 |
+| 国际化 | Compose Multiplatform Resources | 1.11.1 | 共享三语资源、应用内语言切换与英语回退 |
 | 设计系统 | Material 3 | 1.11.0-alpha07 | 主题、组件、图标与响应式布局 |
 | 导航 | Compose Navigation 3 | 1.1.1 | 紧凑窗口下的类型化页面栈 |
 | 依赖注入 | Koin | 4.2.1 | 构造函数注入与平台组合根 |

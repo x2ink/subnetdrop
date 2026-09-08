@@ -29,6 +29,9 @@ val desktopPlatformModule = module {
     single<Settings> {
         PreferencesSettings(Preferences.userRoot().node("ink/x2/subnetdrop/file-transfer"))
     }
+    single<Settings>(named(APP_SETTINGS_QUALIFIER)) {
+        PreferencesSettings(Preferences.userRoot().node("ink/x2/subnetdrop/app-settings"))
+    }
     single<DatabaseDriverFactory> {
         DesktopDatabaseDriverFactory(File(desktopDataDirectory(), "subnetdrop.db"))
     }

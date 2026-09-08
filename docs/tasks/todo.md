@@ -1,5 +1,13 @@
 # SubnetDrop 任务状态
 
+## 当前计划：应用内语言切换
+
+- [x] 定义并持久化“跟随系统 / 简体中文 / English / 日本語”应用语言设置，默认跟随系统。
+- [x] 在 Android、macOS 和 Windows 共用的 Compose 根节点应用所选 Locale，并让资源立即重组。
+- [x] 在设置页新增语言选择项与 Material 3 单选弹窗，接入 ViewModel 和三语提示。
+- [x] 补充设置默认值、持久化、非法存储值回退测试，并更新本地化规格、架构与 README。
+- [x] 最多进行 3 轮编译/测试修正，运行完整 JVM、桌面和 Android shared 验证，不安装 Android 应用。
+
 ## 当前计划：附近设备删除与历史清理
 
 - [x] 定义忘记设备语义：清除信任并从附近列表移除，可选删除文本与文件消息，但不删除已保存实体文件。
@@ -254,6 +262,13 @@
 
 ## 审查记录
 
+设置页新增“应用语言”卡片和 Material 3 单选弹窗，提供“跟随系统 / 简体中文 / English / 日本語”。选择通过
+`AppSettingsRepository` 的只读 `StateFlow` 进入共享 UI，由独立的 Multiplatform Settings 存储持久化；未知存储值
+回退为跟随系统。Compose 根节点在 Android/JVM 应用平台 Locale 后按语言重建资源环境，所以当前页面和后续 Snackbar
+都使用新语言，不需要重启或维护第二套文案字典。三套资源现为 126 个同构 key，完整 JVM、桌面及 Android shared
+回归通过，未安装 Android 应用。第二个桌面实例因已有进程占用服务端口而无法进行交互走查，边界和证据见
+[`verification/2026-09-08-app-language-setting.md`](./verification/2026-09-08-app-language-setting.md)。
+
 附近设备项现在通过同一个 Material 3 操作菜单提供删除能力：Android 使用 `combinedClickable` 长按，桌面使用
 Compose Desktop 的 Secondary `PointerMatcher` 响应右键，二者都不会替代普通点击。删除菜单之后还有确认 Dialog，
 “同时删除聊天记录”默认不勾选；Dialog 明确说明实体文件仍会保留，并完整提供中、英、日文案。
@@ -266,7 +281,8 @@ peer 变为隐藏、离线、未配对，conversation 与文本/文件消息保�
 [`verification/2026-09-08-peer-deletion.md`](./verification/2026-09-08-peer-deletion.md)。
 
 共享 UI 已迁移到 Compose Multiplatform Resources：默认 `values` 为英语，`values-zh` 为简体中文，
-`values-ja` 为日语，共 118 个同构资源键，Android、macOS 和 Windows 均按系统语言选择，不支持的语言回退英语。
+`values-ja` 为日语，共 126 个同构资源键，Android、macOS 和 Windows 默认按系统语言选择，也可在设置中固定语言；
+不支持的语言回退英语。
 首页、聊天、设置、配对、文件确认、传输状态、Snackbar 和无障碍描述不再依赖中文 Kotlin 字面量；ViewModel
 只保存稳定消息键和格式参数，文件输入使用稳定错误类型，底层平台异常详情仍保留原文便于诊断。资源完整性测试、
 完整 JVM 回归、桌面编译与 Android shared 编译通过，未安装 Android 应用。证据见

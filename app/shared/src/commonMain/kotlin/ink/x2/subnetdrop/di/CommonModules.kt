@@ -1,11 +1,13 @@
 package ink.x2.subnetdrop.di
 
 import ink.x2.subnetdrop.data.DatabaseFactory
+import ink.x2.subnetdrop.data.MultiplatformAppSettingsRepository
 import ink.x2.subnetdrop.data.MultiplatformFileTransferSettingsRepository
 import ink.x2.subnetdrop.data.SqlDelightChatRepository
 import ink.x2.subnetdrop.data.SqlDelightDeviceProfileRepository
 import ink.x2.subnetdrop.data.SqlDelightPeerRepository
 import ink.x2.subnetdrop.data.SqlDelightTrustedIdentityRepository
+import ink.x2.subnetdrop.domain.port.AppSettingsRepository
 import ink.x2.subnetdrop.domain.port.ChatRepository
 import ink.x2.subnetdrop.domain.port.DeviceProfileRepository
 import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
@@ -20,9 +22,9 @@ import ink.x2.subnetdrop.network.identity.LocalIdentityService
 import ink.x2.subnetdrop.presentation.SubnetDropViewModel
 import ink.x2.subnetdrop.runtime.SubnetDropRuntime
 import org.koin.core.module.Module
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import org.koin.core.module.dsl.viewModel
 
 fun commonModules(): List<Module> = listOf(dataModule, domainModule, presentationModule)
 
@@ -32,6 +34,9 @@ private val dataModule = module {
     single<ChatRepository> { SqlDelightChatRepository(get()) }
     single<DeviceProfileRepository> { SqlDelightDeviceProfileRepository(get()) }
     single<TrustedIdentityRepository> { SqlDelightTrustedIdentityRepository(get()) }
+    single<AppSettingsRepository> {
+        MultiplatformAppSettingsRepository(get(named(APP_SETTINGS_QUALIFIER)))
+    }
     single<FileTransferSettingsRepository> {
         MultiplatformFileTransferSettingsRepository(
             storage = get(),
@@ -77,9 +82,11 @@ private val presentationModule = module {
             pairingService = get(),
             fileTransferService = get(),
             fileTransferSettingsRepository = get(),
+            appSettingsRepository = get(),
         )
     }
 }
 
 internal const val DEFAULT_DISPLAY_NAME_QUALIFIER = "defaultDisplayName"
 internal const val DEFAULT_SAVE_DIRECTORY_QUALIFIER = "defaultSaveDirectory"
+internal const val APP_SETTINGS_QUALIFIER = "appSettings"

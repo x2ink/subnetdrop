@@ -29,7 +29,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [文件消息持久化 v1](spec/persisted-file-messages-v1.md)
 - [多文件并行传输 v1](spec/parallel-file-transfer-v1.md)
 - [聊天时间线与输入布局 v1](spec/chat-timeline-ui-v1.md)
-- [中英日三语适配 v1](spec/localization-v1.md)
+- [中英日三语与应用内语言切换 v1](spec/localization-v1.md)
 - [附近设备删除 v1](spec/peer-deletion-v1.md)
 
 ### 执行与验证：当前做到什么程度
@@ -43,6 +43,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [首页手动刷新附近设备验证](tasks/verification/2026-09-07-manual-discovery-refresh.md)
 - [桌面聊天页拖放发送文件验证](tasks/verification/2026-09-08-desktop-file-drop.md)
 - [中英日三语适配验证](tasks/verification/2026-09-08-localization.md)
+- [应用内语言切换验证](tasks/verification/2026-09-08-app-language-setting.md)
 - [附近设备删除与历史清理验证](tasks/verification/2026-09-08-peer-deletion.md)
 - [文件进度同步与吞吐优化验证](tasks/verification/2026-09-07-file-progress-throughput.md)
 - [聊天时间线与 Android IME 验证](tasks/verification/2026-09-05-chat-timeline-ime.md)

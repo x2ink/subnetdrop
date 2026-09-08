@@ -2,8 +2,8 @@
 
 ## Goal
 
-SubnetDrop 的 Android、macOS 和 Windows 用户界面支持英语、简体中文和日语，并默认跟随操作系统语言。当前版本
-不提供独立于系统的应用内语言开关。
+SubnetDrop 的 Android、macOS 和 Windows 用户界面支持英语、简体中文和日语。应用默认跟随操作系统语言，用户也
+可以在设置中固定使用简体中文、English 或日本語；选择结果在重启后保留。
 
 ## Resource model
 
@@ -12,7 +12,10 @@ SubnetDrop 的 Android、macOS 和 Windows 用户界面支持英语、简体中�
 
 ```mermaid
 flowchart LR
-    Locale[System locale] --> Compose[Compose Resources]
+    System[System locale] --> Selection[Language setting]
+    Manual[Manual locale] --> Selection
+    Selection --> Platform[Platform current Locale]
+    Platform --> Compose[Compose Resources]
     Compose --> English[Default English]
     Compose --> Chinese[Chinese zh]
     Compose --> Japanese[Japanese ja]
@@ -21,8 +24,10 @@ flowchart LR
     Error[Platform/network detail] --> UI
 ```
 
-普通页面状态在组合期间解析资源，系统配置变化后随重新组合更新。ViewModel 只保存稳定消息键、格式参数和可选错误
-详情，不保存某一种语言的成功/失败文案。文件选择与桌面拖放使用稳定错误类型，再由当前 UI locale 翻译。
+语言偏好由领域端口暴露只读 `StateFlow`，Multiplatform Settings 适配器负责持久化。共享 Compose 根节点把选择应用
+到 Android/JVM 当前 Locale，并以语言为 key 重建 Compose Resources 环境；“跟随系统”恢复进程启动时捕获的系统
+Locale。普通页面状态在组合期间解析资源。ViewModel 只保存稳定消息键、格式参数和可选错误详情，不保存某一种语言
+的成功/失败文案。文件选择与桌面拖放使用稳定错误类型，再由当前 UI locale 翻译。
 
 ## Coverage
 
@@ -41,9 +46,11 @@ README 和技术文档本身不要求提供三份翻译；它们只记录产品�
 
 ## Acceptance criteria
 
-1. 系统语言为英语、简体中文或日语时，共享 UI 使用对应资源；其他语言回退到英语。
-2. 正常使用路径中不再以 Kotlin 字面量维护某一种语言的用户可见文案。
-3. 动态数量、范围、设备名、文件名和错误详情使用占位符格式化，不通过字符串拼接固定语序。
-4. ViewModel 的延迟通知在展示时按当前语言解析，不把已经翻译的固定文案写入状态。
-5. 文件选择和桌面拖放的已知校验错误支持三语；未知平台详情允许保留原文。
-6. Android 和桌面编译通过，JVM 测试验证三套资源键完整且代表性文案可读取。
+1. 默认选择“跟随系统”；系统语言为英语、简体中文或日语时使用对应资源，其他语言回退到英语。
+2. 用户可在设置页切换“跟随系统 / 简体中文 / English / 日本語”，无需重启即可更新当前界面。
+3. 手动选择写入本地设置，应用重启后恢复；未知或损坏的存储值安全回退为“跟随系统”。
+4. 正常使用路径中不再以 Kotlin 字面量维护某一种语言的用户可见文案。
+5. 动态数量、范围、设备名、文件名和错误详情使用占位符格式化，不通过字符串拼接固定语序。
+6. ViewModel 的延迟通知在展示时按当前语言解析，不把已经翻译的固定文案写入状态。
+7. 文件选择和桌面拖放的已知校验错误支持三语；未知平台详情允许保留原文。
+8. Android 和桌面编译通过，JVM 测试验证设置持久化、三套资源键完整且代表性文案可读取。

@@ -34,6 +34,11 @@ val androidPlatformModule = module {
             androidContext().getSharedPreferences(FILE_SETTINGS_NAME, Context.MODE_PRIVATE),
         )
     }
+    single<Settings>(named(APP_SETTINGS_QUALIFIER)) {
+        SharedPreferencesSettings(
+            androidContext().getSharedPreferences(APP_SETTINGS_NAME, Context.MODE_PRIVATE),
+        )
+    }
     single<SecureKeyValueStore> { AndroidSecureKeyValueStore(androidContext()) }
     single<SecureMessageCodec> { TinkSecureMessageCodec(get()) }
     single<TimestampProvider> { TimestampProvider(System::currentTimeMillis) }
@@ -68,3 +73,4 @@ private fun defaultAndroidDeviceName(context: Context): String {
 }
 
 private const val FILE_SETTINGS_NAME = "file-transfer-settings"
+private const val APP_SETTINGS_NAME = "app-settings"

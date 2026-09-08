@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Security
@@ -43,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ink.x2.subnetdrop.AppUiState
+import ink.x2.subnetdrop.domain.model.AppLanguage
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.BYTES_PER_GIB
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.MAX_CONFIGURABLE_MAX_FILE_SIZE_BYTES
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.MIN_CONFIGURABLE_MAX_FILE_SIZE_BYTES
@@ -88,6 +91,7 @@ fun HomeScreen(
     onSaveDirectoryChanged: (String) -> Unit,
     onIncomingFileConfirmationChanged: (Boolean) -> Unit,
     onMaxFileSizeChanged: (Long) -> Unit,
+    onAppLanguageChanged: (AppLanguage) -> Unit,
     onSettingsError: (String) -> Unit,
 ) {
     Scaffold(
@@ -127,6 +131,8 @@ fun HomeScreen(
                     onSaveDirectoryChanged = onSaveDirectoryChanged,
                     onIncomingFileConfirmationChanged = onIncomingFileConfirmationChanged,
                     onMaxFileSizeChanged = onMaxFileSizeChanged,
+                    appLanguage = state.appLanguage,
+                    onAppLanguageChanged = onAppLanguageChanged,
                     onSettingsError = onSettingsError,
                 )
             }
@@ -457,6 +463,8 @@ private fun SettingsPanel(
     onSaveDirectoryChanged: (String) -> Unit,
     onIncomingFileConfirmationChanged: (Boolean) -> Unit,
     onMaxFileSizeChanged: (Long) -> Unit,
+    appLanguage: AppLanguage,
+    onAppLanguageChanged: (AppLanguage) -> Unit,
     onSettingsError: (String) -> Unit,
 ) {
     var draftName by remember(displayName) { mutableStateOf(displayName.orEmpty()) }
@@ -473,6 +481,17 @@ private fun SettingsPanel(
         onDirectorySelected = onSaveDirectoryChanged,
         onError = onSettingsError,
     )
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            selected = appLanguage,
+            onDismiss = { showLanguageDialog = false },
+            onSelected = {
+                showLanguageDialog = false
+                onAppLanguageChanged(it)
+            },
+        )
+    }
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp),
@@ -517,6 +536,15 @@ private fun SettingsPanel(
                 modifier = Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
+            )
+        }
+        item {
+            SettingValue(
+                icon = Icons.Outlined.Language,
+                label = appString(AppString.APP_LANGUAGE),
+                value = appLanguage.label(),
+                modifier = Modifier.clickable { showLanguageDialog = true },
+                trailingIcon = Icons.Outlined.ChevronRight,
             )
         }
         item {
@@ -601,6 +629,50 @@ private fun SettingsPanel(
             )
         }
     }
+}
+
+@Composable
+private fun LanguageSelectionDialog(
+    selected: AppLanguage,
+    onDismiss: () -> Unit,
+    onSelected: (AppLanguage) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(appString(AppString.SELECT_APP_LANGUAGE)) },
+        text = {
+            Column {
+                AppLanguage.entries.forEach { language ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelected(language) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = language == selected,
+                            onClick = { onSelected(language) },
+                        )
+                        Text(language.label(), modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(appString(AppString.ACTION_CANCEL))
+            }
+        },
+    )
+}
+
+@Composable
+private fun AppLanguage.label(): String = when (this) {
+    AppLanguage.SYSTEM -> appString(AppString.LANGUAGE_SYSTEM)
+    AppLanguage.SIMPLIFIED_CHINESE -> appString(AppString.LANGUAGE_SIMPLIFIED_CHINESE)
+    AppLanguage.ENGLISH -> appString(AppString.LANGUAGE_ENGLISH)
+    AppLanguage.JAPANESE -> appString(AppString.LANGUAGE_JAPANESE)
 }
 
 @Composable

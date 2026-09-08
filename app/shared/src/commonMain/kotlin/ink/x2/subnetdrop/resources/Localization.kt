@@ -16,6 +16,12 @@ enum class AppString(internal val resource: StringResource) {
     REFRESH_NEARBY_DEVICES(Res.string.refresh_nearby_devices),
     NEARBY_DEVICES(Res.string.nearby_devices),
     SETTINGS(Res.string.settings),
+    APP_LANGUAGE(Res.string.app_language),
+    SELECT_APP_LANGUAGE(Res.string.select_app_language),
+    LANGUAGE_SYSTEM(Res.string.language_system),
+    LANGUAGE_SIMPLIFIED_CHINESE(Res.string.language_simplified_chinese),
+    LANGUAGE_ENGLISH(Res.string.language_english),
+    LANGUAGE_JAPANESE(Res.string.language_japanese),
     NO_DEVICES_TITLE(Res.string.no_devices_title),
     NO_DEVICES_DETAIL(Res.string.no_devices_detail),
     DELETE_DEVICE(Res.string.delete_device),
@@ -122,6 +128,8 @@ enum class AppString(internal val resource: StringResource) {
     RECEIVE_SETTING_UPDATE_FAILED(Res.string.receive_setting_update_failed),
     MAX_FILE_SIZE_UPDATE_FAILED(Res.string.max_file_size_update_failed),
     MAX_FILE_SIZE_UPDATED(Res.string.max_file_size_updated),
+    LANGUAGE_UPDATE_FAILED(Res.string.language_update_failed),
+    LANGUAGE_UPDATED(Res.string.language_updated),
     READ_RECEIPT_FAILED(Res.string.read_receipt_failed),
 }
 

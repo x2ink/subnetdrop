@@ -2,12 +2,14 @@ package ink.x2.subnetdrop.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import ink.x2.subnetdrop.domain.model.AppLanguage
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.domain.model.conversationIdFor
+import ink.x2.subnetdrop.domain.port.AppSettingsRepository
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PairingCandidate
@@ -45,6 +47,7 @@ class SubnetDropViewModel(
     private val pairingService: PairingService,
     private val fileTransferService: FileTransferService,
     private val fileTransferSettingsRepository: FileTransferSettingsRepository,
+    private val appSettingsRepository: AppSettingsRepository,
 ) : ViewModel() {
     private val mutableSelection = MutableStateFlow<ChatSelection?>(null)
     private val mutableNotice = MutableStateFlow<UiNotice?>(null)
@@ -60,6 +63,7 @@ class SubnetDropViewModel(
     val incomingFileOffers = fileTransferService.incomingOffers
     val fileTransfers = fileTransferService.transfers
     val fileTransferSettings = fileTransferSettingsRepository.settings
+    val appLanguage = appSettingsRepository.language
     val messages = mutableSelection
         .flatMapLatest { selected ->
             selected?.let { observeMessages(it.conversationId) } ?: emptyFlow()
@@ -180,6 +184,11 @@ class SubnetDropViewModel(
     fun updateMaxFileSize(maxFileSizeBytes: Long) = launchAction(AppString.MAX_FILE_SIZE_UPDATE_FAILED) {
         fileTransferSettingsRepository.updateMaxFileSizeBytes(maxFileSizeBytes)
         showMessage(AppString.MAX_FILE_SIZE_UPDATED)
+    }
+
+    fun updateAppLanguage(language: AppLanguage) = launchAction(AppString.LANGUAGE_UPDATE_FAILED) {
+        appSettingsRepository.updateLanguage(language)
+        showMessage(AppString.LANGUAGE_UPDATED)
     }
 
     fun reportFilePickerError(message: String) {

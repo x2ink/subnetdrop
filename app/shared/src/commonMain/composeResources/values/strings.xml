@@ -10,6 +10,12 @@
     <string name="refresh_nearby_devices">Refresh nearby devices</string>
     <string name="nearby_devices">Nearby</string>
     <string name="settings">Settings</string>
+    <string name="app_language">App language</string>
+    <string name="select_app_language">Choose app language</string>
+    <string name="language_system">System default</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_english">English</string>
+    <string name="language_japanese">日本語</string>
     <string name="no_devices_title">No devices found</string>
     <string name="no_devices_detail">Make sure the other device is running SubnetDrop and connected to the same Wi-Fi.</string>
     <string name="delete_device">Delete device</string>
@@ -116,5 +122,7 @@
     <string name="receive_setting_update_failed">Could not update the receive setting</string>
     <string name="max_file_size_update_failed">Could not update the file-size limit</string>
     <string name="max_file_size_updated">Per-file size limit updated</string>
+    <string name="language_update_failed">Could not update the app language</string>
+    <string name="language_updated">App language updated</string>
     <string name="read_receipt_failed">Could not send the read receipt</string>
 </resources>

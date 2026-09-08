@@ -13,6 +13,9 @@ class LocalizationTest {
         assertEquals("Nearby", strings("values").getValue("nearby_devices"))
         assertEquals("附近设备", strings("values-zh").getValue("nearby_devices"))
         assertEquals("近くのデバイス", strings("values-ja").getValue("nearby_devices"))
+        assertEquals("System default", strings("values").getValue("language_system"))
+        assertEquals("跟随系统", strings("values-zh").getValue("language_system"))
+        assertEquals("システム設定", strings("values-ja").getValue("language_system"))
     }
 
     @Test

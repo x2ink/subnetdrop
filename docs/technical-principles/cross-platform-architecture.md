@@ -51,15 +51,16 @@ flowchart LR
 ## UI 适配
 
 - Compose Multiplatform 与 Material 3 共享颜色、排版、列表、消息气泡、文件卡片和对话框。
-- Compose Multiplatform Resources 在 `commonMain` 维护英语默认资源、简体中文和日语资源，并按系统 locale
-  选择；不受支持的语言回退到英语。ViewModel 传递稳定消息键，平台异常详情保留原文后由本地化前缀包装。
+- Compose Multiplatform Resources 在 `commonMain` 维护英语默认资源、简体中文和日语资源。应用默认按系统 locale
+  选择，也可在设置中固定三种语言；所选语言通过平台当前 Locale 立即驱动资源重组，不受支持的语言回退到英语。
+  ViewModel 传递稳定消息键，平台异常详情保留原文后由本地化前缀包装。
 - 紧凑宽度使用 Navigation 3 页面栈，底部只保留“附近设备 / 设置”；聊天由附近设备项直接进入。
 - 桌面宽度使用主从双栏；左右列表分别滚动，窗口高度缩小时内容不被固定区域截断。
 - 桌面最小窗口为 `480 x 420`，默认 `1180 x 760`。
 - FileKit 从 common Compose UI 发起文件与目录选择、执行跨平台文件 I/O 和系统默认应用打开，避免维护
   Android Activity Result 与 AWT 两套业务接口。
-- Multiplatform Settings 以同一个领域仓库暴露接收确认、保存目录和单文件大小上限，Android 使用
-  SharedPreferences，桌面使用 Preferences。
+- Multiplatform Settings 通过领域仓库分别暴露应用语言和文件设置；Android 使用 SharedPreferences，桌面使用
+  Preferences。语言偏好默认跟随系统，并在 Android、macOS 和 Windows 进程重启后恢复。
 
 ## 平台能力表
 

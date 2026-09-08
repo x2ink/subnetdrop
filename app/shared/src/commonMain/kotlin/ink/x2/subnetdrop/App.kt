@@ -18,9 +18,12 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
+import ink.x2.subnetdrop.domain.model.AppLanguage
 import ink.x2.subnetdrop.presentation.ChatSelection
 import ink.x2.subnetdrop.presentation.SubnetDropViewModel
 import ink.x2.subnetdrop.resources.resolve
@@ -41,6 +45,28 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
     val ui = rememberAppUiState(viewModel)
+    AppLanguageEffect(ui.appLanguage) {
+        AppContent(ui, viewModel)
+    }
+}
+
+@Composable
+private fun AppLanguageEffect(
+    language: AppLanguage,
+    content: @Composable () -> Unit,
+) {
+    var appliedLanguage by remember { mutableStateOf<AppLanguage?>(null) }
+    LaunchedEffect(language) {
+        applyPlatformLanguage(language)
+        appliedLanguage = language
+    }
+    key(appliedLanguage) {
+        content()
+    }
+}
+
+@Composable
+private fun AppContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     ui.notice?.let { notice ->
         val message = notice.text.resolve()
@@ -106,6 +132,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onSaveDirectoryChanged = viewModel::updateSaveDirectory,
             onIncomingFileConfirmationChanged = viewModel::updateIncomingFileConfirmation,
             onMaxFileSizeChanged = viewModel::updateMaxFileSize,
+            onAppLanguageChanged = viewModel::updateAppLanguage,
             onSettingsError = viewModel::reportFilePickerError,
         )
         VerticalDivider(Modifier.width(1.dp))
@@ -155,6 +182,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onSaveDirectoryChanged = viewModel::updateSaveDirectory,
                         onIncomingFileConfirmationChanged = viewModel::updateIncomingFileConfirmation,
                         onMaxFileSizeChanged = viewModel::updateMaxFileSize,
+                        onAppLanguageChanged = viewModel::updateAppLanguage,
                         onSettingsError = viewModel::reportFilePickerError,
                     )
                 }
@@ -209,6 +237,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
     val storedFileMessages by viewModel.storedFileMessages.collectAsStateWithLifecycle()
     val fileTransfers by viewModel.fileTransfers.collectAsStateWithLifecycle()
     val fileTransferSettings by viewModel.fileTransferSettings.collectAsStateWithLifecycle()
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     return AppUiState(
         peers = peers,
         candidates = candidates,
@@ -223,6 +252,7 @@ private fun rememberAppUiState(viewModel: SubnetDropViewModel): AppUiState {
         storedFileMessages = storedFileMessages,
         fileTransfers = fileTransfers,
         fileTransferSettings = fileTransferSettings,
+        appLanguage = appLanguage,
     )
 }
 
