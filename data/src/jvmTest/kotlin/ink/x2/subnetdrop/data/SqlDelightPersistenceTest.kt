@@ -18,6 +18,7 @@ import kotlin.io.path.absolutePathString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class SqlDelightPersistenceTest {
     @Test
@@ -63,16 +64,20 @@ class SqlDelightPersistenceTest {
         val databasePath = Files.createTempDirectory("subnetdrop-legacy-test").resolve("chat.db")
         val legacyDriver = JdbcSqliteDriver("jdbc:sqlite:${databasePath.absolutePathString()}")
         ChatDatabase.Schema.create(legacyDriver)
+        seedTextDatabase(ChatDatabase(legacyDriver))
         legacyDriver.execute(null, "DROP INDEX fileMessageConversationCreatedAt", 0).value
         legacyDriver.execute(null, "DROP TABLE fileMessageEntity", 0).value
+        legacyDriver.execute(null, "ALTER TABLE peerEntity DROP COLUMN is_hidden", 0).value
         legacyDriver.execute(null, "PRAGMA user_version = 0", 0).value
-        seedTextDatabase(ChatDatabase(legacyDriver))
         legacyDriver.close()
 
         val migratedDriver = DesktopDatabaseDriverFactory(databasePath.toFile()).createDriver()
         try {
             val repository = SqlDelightChatRepository(ChatDatabase(migratedDriver))
-            assertEquals(listOf("hello", "reply"), repository.observeMessages(CONVERSATION_ID).first().map(Message::body))
+            assertEquals(
+                listOf("hello", "reply"),
+                repository.observeMessages(CONVERSATION_ID).first().map(Message::body),
+            )
 
             repository.saveFileMessage(completedFileTransfer())
             assertEquals(
@@ -81,6 +86,58 @@ class SqlDelightPersistenceTest {
             )
         } finally {
             migratedDriver.close()
+            Files.deleteIfExists(databasePath)
+            Files.deleteIfExists(databasePath.parent)
+        }
+    }
+
+    @Test
+    fun deletingPeerCanKeepChatHistory() = runTest {
+        withSeededDatabase { database ->
+            val peerRepository = SqlDelightPeerRepository(database)
+            val chatRepository = SqlDelightChatRepository(database)
+
+            peerRepository.deletePeer(PEER_ID, deleteHistory = false)
+
+            assertEquals(emptyList(), peerRepository.observePeers().first())
+            assertNull(SqlDelightTrustedIdentityRepository(database).find(PEER_ID))
+            assertEquals(TrustState.UNPAIRED, peerRepository.findPeer(PEER_ID)?.trustState)
+            assertEquals(2, chatRepository.observeMessages(CONVERSATION_ID).first().size)
+            assertEquals(1, chatRepository.observeFileMessages(CONVERSATION_ID).first().size)
+
+            val rediscovered = requireNotNull(peerRepository.findPeer(PEER_ID)).copy(
+                availability = PeerAvailability.ONLINE,
+            )
+            peerRepository.upsertPeer(rediscovered)
+            assertEquals(listOf(PEER_ID), peerRepository.observePeers().first().map(Peer::id))
+        }
+    }
+
+    @Test
+    fun deletingPeerCanDeleteChatHistory() = runTest {
+        withSeededDatabase { database ->
+            val peerRepository = SqlDelightPeerRepository(database)
+            val chatRepository = SqlDelightChatRepository(database)
+
+            peerRepository.deletePeer(PEER_ID, deleteHistory = true)
+
+            assertNull(peerRepository.findPeer(PEER_ID))
+            assertNull(SqlDelightTrustedIdentityRepository(database).find(PEER_ID))
+            assertEquals(emptyList(), chatRepository.observeConversations().first())
+            assertEquals(emptyList(), chatRepository.observeMessages(CONVERSATION_ID).first())
+            assertEquals(emptyList(), chatRepository.observeFileMessages(CONVERSATION_ID).first())
+        }
+    }
+
+    private suspend fun withSeededDatabase(block: suspend (ChatDatabase) -> Unit) {
+        val databasePath = Files.createTempDirectory("subnetdrop-delete-test").resolve("chat.db")
+        val driver = DesktopDatabaseDriverFactory(databasePath.toFile()).createDriver()
+        try {
+            val database = ChatDatabase(driver)
+            seedDatabase(database)
+            block(database)
+        } finally {
+            driver.close()
             Files.deleteIfExists(databasePath)
             Files.deleteIfExists(databasePath.parent)
         }

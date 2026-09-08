@@ -67,9 +67,12 @@ class SharedCommonTest {
     fun publicAndroidDownloadsMarkerHasReadableSettingsLabel() {
         assertEquals(
             "公共下载目录/Download/SubnetDrop",
-            displaySaveDirectory("mediastore://downloads/SubnetDrop"),
+            displaySaveDirectory(
+                "mediastore://downloads/SubnetDrop",
+                "公共下载目录/Download/SubnetDrop",
+            ),
         )
-        assertEquals("/chosen", displaySaveDirectory("/chosen"))
+        assertEquals("/chosen", displaySaveDirectory("/chosen", "Public downloads"))
     }
 
     private fun message(

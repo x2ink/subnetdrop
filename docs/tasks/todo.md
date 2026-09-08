@@ -1,5 +1,23 @@
 # SubnetDrop 任务状态
 
+## 当前计划：附近设备删除与历史清理
+
+- [x] 定义忘记设备语义：清除信任并从附近列表移除，可选删除文本与文件消息，但不删除已保存实体文件。
+- [x] 新增 SQLDelight 设备隐藏字段、事务化删除查询与数据库迁移，保证 StateFlow 自动刷新。
+- [x] Android 长按设备、桌面右键设备时打开删除菜单，再由确认 Dialog 选择是否同时删除聊天记录。
+- [x] 删除前取消该设备的活跃文件传输，并从发现在线跟踪器移除，避免残留状态立即覆盖删除结果。
+- [x] 补充数据、发现与共享 UI 测试，更新三语资源、架构、README 和验证记录。
+- [x] 最多进行 3 轮编译/测试修正，运行完整 JVM、桌面和 Android shared 验证，不安装 Android 应用。
+
+## 当前计划：中英日三语适配
+
+- [x] 使用 Compose Multiplatform Resources 建立英文默认资源、简体中文和日文资源，按系统语言自动选择。
+- [x] 迁移首页、聊天页、设置、配对/文件弹窗、无障碍描述和文件状态中的硬编码用户文案。
+- [x] 将 ViewModel 通知改为稳定的本地化消息模型，将文件输入校验改为稳定错误类型后由 UI 翻译。
+- [x] 保留底层网络和操作系统异常详情原文，并用当前语言的错误前缀包装。
+- [x] 增加三语资源完整性与代表性文案测试，更新 README、规格、架构和验证记录。
+- [x] 最多进行 3 轮编译/测试修正，运行完整 JVM、Android shared 和桌面验证，不安装 Android 应用。
+
 ## 当前计划：桌面聊天页拖放发送文件
 
 - [x] 复用现有文件预检与批量发送入口，避免拖放形成第二套传输链路。
@@ -235,6 +253,24 @@
 - [ ] 对外发布前选择并添加开源许可证。
 
 ## 审查记录
+
+附近设备项现在通过同一个 Material 3 操作菜单提供删除能力：Android 使用 `combinedClickable` 长按，桌面使用
+Compose Desktop 的 Secondary `PointerMatcher` 响应右键，二者都不会替代普通点击。删除菜单之后还有确认 Dialog，
+“同时删除聊天记录”默认不勾选；Dialog 明确说明实体文件仍会保留，并完整提供中、英、日文案。
+
+删除链路先清理目标设备的配对候选、活跃/终态内存传输状态和发现跟踪代次，再执行 SQLDelight 事务。保留历史时
+peer 变为隐藏、离线、未配对，conversation 与文本/文件消息保留；再次收到公告会取消隐藏但要求重新配对。勾选历史
+时显式删除消息、文件消息、conversation 与 peer，不依赖平台 SQLite 外键开关。v2→v3 迁移新增 `is_hidden`，旧库
+迁移、两种删除分支、发现忘记/重新发现和传输内存清理测试均通过；完整 JVM、桌面和 Android shared 回归通过，
+没有安装 Android 应用。证据见
+[`verification/2026-09-08-peer-deletion.md`](./verification/2026-09-08-peer-deletion.md)。
+
+共享 UI 已迁移到 Compose Multiplatform Resources：默认 `values` 为英语，`values-zh` 为简体中文，
+`values-ja` 为日语，共 118 个同构资源键，Android、macOS 和 Windows 均按系统语言选择，不支持的语言回退英语。
+首页、聊天、设置、配对、文件确认、传输状态、Snackbar 和无障碍描述不再依赖中文 Kotlin 字面量；ViewModel
+只保存稳定消息键和格式参数，文件输入使用稳定错误类型，底层平台异常详情仍保留原文便于诊断。资源完整性测试、
+完整 JVM 回归、桌面编译与 Android shared 编译通过，未安装 Android 应用。证据见
+[`verification/2026-09-08-localization.md`](./verification/2026-09-08-localization.md)。
 
 桌面聊天页现在通过 Compose Desktop `dragAndDropTarget` 接收操作系统文件列表。拖入、离开和结束事件只控制
 “松开发送文件”覆盖提示；投放后将普通文件转换为 FileKit `PlatformFile`，与附件选择器共享

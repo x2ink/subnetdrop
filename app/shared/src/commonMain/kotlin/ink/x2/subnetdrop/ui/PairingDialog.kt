@@ -13,6 +13,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ink.x2.subnetdrop.domain.port.PairingCandidate
+import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.appString
 
 @Composable
 fun PairingDialog(
@@ -22,10 +24,10 @@ fun PairingDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("与 ${candidate.identity.displayName} 安全配对") },
+        title = { Text(appString(AppString.PAIRING_TITLE, candidate.identity.displayName)) },
         text = {
             Column {
-                Text("请在两台设备上核对下方安全码，完全一致后再确认。")
+                Text(appString(AppString.PAIRING_INSTRUCTION))
                 Text(
                     text = candidate.safetyCode,
                     modifier = Modifier.padding(top = 18.dp),
@@ -34,14 +36,14 @@ fun PairingDialog(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "安全码不一致可能意味着连接被冒充，请取消配对。",
+                    text = appString(AppString.PAIRING_WARNING),
                     modifier = Modifier.padding(top = 12.dp),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         },
-        confirmButton = { Button(onClick = onConfirm) { Text("安全码一致") } },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        confirmButton = { Button(onClick = onConfirm) { Text(appString(AppString.PAIRING_CONFIRM)) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(appString(AppString.ACTION_CANCEL)) } },
     )
 }

@@ -72,10 +72,17 @@ class SubnetDropRuntime(
 
     suspend fun refreshDiscovery() {
         lifecycleMutex.withLock {
-            check(state.value is RuntimeState.Running || state.value is RuntimeState.Degraded) {
-                "局域网服务尚未就绪"
+            if (state.value !is RuntimeState.Running && state.value !is RuntimeState.Degraded) {
+                throw IllegalStateException()
             }
             peerDiscovery.refresh()
+        }
+    }
+
+    suspend fun deletePeer(peerId: String, deleteHistory: Boolean) {
+        lifecycleMutex.withLock {
+            peerDiscovery.forget(peerId)
+            peerRepository.deletePeer(peerId, deleteHistory)
         }
     }
 
@@ -112,7 +119,7 @@ class SubnetDropRuntime(
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
-            mutableState.value = RuntimeState.Degraded(exception.message ?: "设备名称发布失败")
+            mutableState.value = RuntimeState.Degraded(exception.message)
         }
     }
 
@@ -166,7 +173,7 @@ class SubnetDropRuntime(
         transportJob?.cancel()
         runCatching { peerDiscovery.stop() }
         runCatching { chatTransport.stop() }
-        mutableState.value = RuntimeState.Failed(exception.message ?: "局域网服务启动失败")
+        mutableState.value = RuntimeState.Failed(exception.message)
     }
 }
 
@@ -177,9 +184,9 @@ sealed interface RuntimeState {
 
     data class Running(val profile: DeviceProfile) : RuntimeState
 
-    data class Degraded(val reason: String) : RuntimeState
+    data class Degraded(val reason: String?) : RuntimeState
 
-    data class Failed(val reason: String) : RuntimeState
+    data class Failed(val reason: String?) : RuntimeState
 }
 
 enum class RuntimeStartupPhase {

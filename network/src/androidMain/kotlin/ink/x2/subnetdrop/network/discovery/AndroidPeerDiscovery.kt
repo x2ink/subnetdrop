@@ -58,6 +58,10 @@ class AndroidPeerDiscovery(
         delegate.refresh()
     }
 
+    override suspend fun forget(peerId: String) {
+        delegate.forget(peerId)
+    }
+
     private fun bindProcessToWifiIfAvailable() {
         if (processNetworkBinding != null) return
         processNetworkBinding = runCatching {

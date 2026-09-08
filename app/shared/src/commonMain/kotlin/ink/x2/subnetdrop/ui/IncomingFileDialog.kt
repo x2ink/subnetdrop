@@ -5,6 +5,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import ink.x2.subnetdrop.domain.model.IncomingFileOffer
+import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.appString
 
 @Composable
 fun IncomingFileDialog(
@@ -14,15 +16,22 @@ fun IncomingFileDialog(
 ) {
     AlertDialog(
         onDismissRequest = onReject,
-        title = { Text("接收文件？") },
+        title = { Text(appString(AppString.RECEIVE_FILE_TITLE)) },
         text = {
-            Text("${offer.peerDisplayName} 想发送 ${offer.fileName}（${formatFileSize(offer.size)}）")
+            Text(
+                appString(
+                    AppString.RECEIVE_FILE_MESSAGE,
+                    offer.peerDisplayName,
+                    offer.fileName,
+                    formatFileSize(offer.size),
+                ),
+            )
         },
         confirmButton = {
-            TextButton(onClick = onAccept) { Text("接收") }
+            TextButton(onClick = onAccept) { Text(appString(AppString.ACTION_RECEIVE)) }
         },
         dismissButton = {
-            TextButton(onClick = onReject) { Text("拒绝") }
+            TextButton(onClick = onReject) { Text(appString(AppString.ACTION_REJECT)) }
         },
     )
 }

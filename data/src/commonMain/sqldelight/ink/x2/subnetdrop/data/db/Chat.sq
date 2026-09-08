@@ -11,7 +11,8 @@ CREATE TABLE peerEntity (
     port INTEGER NOT NULL,
     availability TEXT NOT NULL,
     trust_state TEXT NOT NULL,
-    last_seen_at INTEGER NOT NULL
+    last_seen_at INTEGER NOT NULL,
+    is_hidden INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0
 );
 
 CREATE TABLE trustedIdentityEntity (
@@ -74,6 +75,7 @@ UPDATE deviceProfileEntity SET display_name = ? WHERE singleton_id = 1;
 selectAllPeers:
 SELECT id, display_name, host, port, availability, trust_state, last_seen_at
 FROM peerEntity
+WHERE is_hidden = 0
 ORDER BY availability DESC, display_name COLLATE NOCASE;
 
 findPeerById:
@@ -100,7 +102,7 @@ INSERT OR REPLACE INTO trustedIdentityEntity(
 ) VALUES (?, ?, ?, ?);
 
 markPeerTrusted:
-UPDATE peerEntity SET trust_state = 'TRUSTED' WHERE id = ?;
+UPDATE peerEntity SET trust_state = 'TRUSTED', is_hidden = 0 WHERE id = ?;
 
 insertPeer:
 INSERT OR IGNORE INTO peerEntity(
@@ -120,8 +122,33 @@ UPDATE peerEntity SET
     port = ?,
     availability = ?,
     trust_state = ?,
-    last_seen_at = ?
+    last_seen_at = ?,
+    is_hidden = 0
 WHERE id = ?;
+
+deleteTrustedIdentityForPeer:
+DELETE FROM trustedIdentityEntity WHERE peer_id = ?;
+
+hidePeer:
+UPDATE peerEntity SET
+    availability = 'OFFLINE',
+    trust_state = 'UNPAIRED',
+    is_hidden = 1
+WHERE id = ?;
+
+deleteMessagesForPeer:
+DELETE FROM messageEntity
+WHERE conversation_id IN (SELECT id FROM conversationEntity WHERE peer_id = ?);
+
+deleteFileMessagesForPeer:
+DELETE FROM fileMessageEntity
+WHERE conversation_id IN (SELECT id FROM conversationEntity WHERE peer_id = ?);
+
+deleteConversationsForPeer:
+DELETE FROM conversationEntity WHERE peer_id = ?;
+
+deletePeerById:
+DELETE FROM peerEntity WHERE id = ?;
 
 markAllPeersOffline:
 UPDATE peerEntity SET availability = 'OFFLINE';

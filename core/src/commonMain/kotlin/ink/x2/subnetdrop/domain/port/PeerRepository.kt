@@ -10,5 +10,7 @@ interface PeerRepository {
 
     suspend fun findPeer(peerId: String): Peer?
 
+    suspend fun deletePeer(peerId: String, deleteHistory: Boolean)
+
     suspend fun markAllOffline()
 }

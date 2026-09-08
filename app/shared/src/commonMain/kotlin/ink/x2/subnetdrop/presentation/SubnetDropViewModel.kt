@@ -17,6 +17,8 @@ import ink.x2.subnetdrop.domain.usecase.ObserveFileMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObserveMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObservePeersUseCase
 import ink.x2.subnetdrop.domain.usecase.SendMessageUseCase
+import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.LocalizedText
 import ink.x2.subnetdrop.runtime.SubnetDropRuntime
 import ink.x2.subnetdrop.runtime.RuntimeState
 import kotlinx.coroutines.CancellationException
@@ -82,7 +84,7 @@ class SubnetDropViewModel(
             requestPairing(peer.id)
             return
         }
-        val localDeviceId = localProfile.value?.deviceId ?: return showError("本机资料尚未就绪")
+        val localDeviceId = localProfile.value?.deviceId ?: return showError(AppString.LOCAL_PROFILE_NOT_READY)
         mutableSelection.value = ChatSelection(
             conversationId = conversationIdFor(localDeviceId, peer.id),
             peerId = peer.id,
@@ -94,82 +96,90 @@ class SubnetDropViewModel(
         mutableSelection.value = null
     }
 
-    fun requestPairing(peerId: String) = launchAction("发起配对失败") {
+    fun requestPairing(peerId: String) = launchAction(AppString.PAIR_REQUEST_FAILED) {
         pairingService.requestPairing(peerId)
     }
 
-    fun confirmPairing(candidate: PairingCandidate) = launchAction("确认配对失败") {
+    fun confirmPairing(candidate: PairingCandidate) = launchAction(AppString.PAIR_CONFIRM_FAILED) {
         pairingService.confirmPairing(candidate.identity.deviceId)
         openTrustedIdentity(candidate)
-        mutableNotice.value = UiNotice("已建立加密信任", isError = false)
+        showMessage(AppString.TRUST_ESTABLISHED)
     }
 
     fun dismissPairing(peerId: String) {
-        launchAction("取消配对失败") {
+        launchAction(AppString.PAIR_CANCEL_FAILED) {
             pairingService.dismissPairing(peerId)
         }
     }
 
     fun send(body: String) {
-        val selected = selection.value ?: return showError("请先选择联系人")
-        val senderId = localProfile.value?.deviceId ?: return showError("本机资料尚未就绪")
-        launchAction("消息发送失败") {
+        val selected = selection.value ?: return showError(AppString.SELECT_CONTACT_FIRST)
+        val senderId = localProfile.value?.deviceId ?: return showError(AppString.LOCAL_PROFILE_NOT_READY)
+        launchAction(AppString.MESSAGE_SEND_FAILED) {
             sendMessage(selected.conversationId, senderId, selected.peerId, body).getOrThrow()
         }
     }
 
-    fun retry(message: Message) = launchAction("消息重试失败") {
+    fun retry(message: Message) = launchAction(AppString.MESSAGE_RETRY_FAILED) {
         sendMessage.retry(message).getOrThrow()
     }
 
-    fun updateDisplayName(displayName: String) = launchAction("设备名称更新失败") {
+    fun updateDisplayName(displayName: String) = launchAction(AppString.DISPLAY_NAME_UPDATE_FAILED) {
         runtime.updateDisplayName(displayName)
-        mutableNotice.value = UiNotice("设备名称已更新", isError = false)
+        showMessage(AppString.DISPLAY_NAME_UPDATED)
     }
 
-    fun retryRuntime() = launchAction("局域网服务启动失败") {
+    fun retryRuntime() = launchAction(AppString.RUNTIME_START_FAILED) {
         runtime.start()
     }
 
-    fun refreshPeers() = launchAction("刷新附近设备失败") {
+    fun refreshPeers() = launchAction(AppString.PEERS_REFRESH_FAILED) {
         runtime.refreshDiscovery()
-        mutableNotice.value = UiNotice("已重新发起设备发现", isError = false)
+        showMessage(AppString.PEERS_REFRESH_STARTED)
+    }
+
+    fun deletePeer(peerId: String, deleteHistory: Boolean) = launchAction(AppString.DELETE_DEVICE_FAILED) {
+        pairingService.dismissPairing(peerId)
+        fileTransferService.clearPeerTransfers(peerId)
+        runtime.deletePeer(peerId, deleteHistory)
+        if (selection.value?.peerId == peerId) closeChat()
+        showMessage(AppString.DEVICE_DELETED)
     }
 
     fun sendFiles(files: List<LocalFile>) {
         if (files.isEmpty()) return
-        val selected = selection.value ?: return showError("请先选择联系人")
-        launchAction("文件发送失败") {
-            mutableNotice.value = UiNotice("已开始并行发送 ${files.size} 个文件", isError = false)
+        val selected = selection.value ?: return showError(AppString.SELECT_CONTACT_FIRST)
+        launchAction(AppString.FILE_SEND_FAILED) {
+            showMessage(AppString.FILES_STARTED, files.size)
             fileTransferService.sendFiles(selected.peerId, files)
-            mutableNotice.value = UiNotice("${files.size} 个文件传输已结束", isError = false)
+            showMessage(AppString.FILES_FINISHED, files.size)
         }
     }
 
-    fun acceptFile(transferId: String) = launchAction("接受文件失败") {
+    fun acceptFile(transferId: String) = launchAction(AppString.FILE_ACCEPT_FAILED) {
         fileTransferService.acceptOffer(transferId)
     }
 
-    fun rejectFile(transferId: String) = launchAction("拒绝文件失败") {
+    fun rejectFile(transferId: String) = launchAction(AppString.FILE_REJECT_FAILED) {
         fileTransferService.rejectOffer(transferId)
     }
 
-    fun cancelFile(transferId: String) = launchAction("取消文件失败") {
+    fun cancelFile(transferId: String) = launchAction(AppString.FILE_CANCEL_FAILED) {
         fileTransferService.cancelTransfer(transferId)
     }
 
-    fun updateSaveDirectory(path: String) = launchAction("保存目录更新失败") {
+    fun updateSaveDirectory(path: String) = launchAction(AppString.SAVE_DIRECTORY_UPDATE_FAILED) {
         fileTransferSettingsRepository.updateSaveDirectory(path)
-        mutableNotice.value = UiNotice("文件保存目录已更新", isError = false)
+        showMessage(AppString.SAVE_DIRECTORY_UPDATED)
     }
 
-    fun updateIncomingFileConfirmation(required: Boolean) = launchAction("接收设置更新失败") {
+    fun updateIncomingFileConfirmation(required: Boolean) = launchAction(AppString.RECEIVE_SETTING_UPDATE_FAILED) {
         fileTransferSettingsRepository.updateRequireIncomingConfirmation(required)
     }
 
-    fun updateMaxFileSize(maxFileSizeBytes: Long) = launchAction("文件大小上限更新失败") {
+    fun updateMaxFileSize(maxFileSizeBytes: Long) = launchAction(AppString.MAX_FILE_SIZE_UPDATE_FAILED) {
         fileTransferSettingsRepository.updateMaxFileSizeBytes(maxFileSizeBytes)
-        mutableNotice.value = UiNotice("单文件大小上限已更新", isError = false)
+        showMessage(AppString.MAX_FILE_SIZE_UPDATED)
     }
 
     fun reportFilePickerError(message: String) {
@@ -210,25 +220,39 @@ class SubnetDropViewModel(
                 .collect { request ->
                     if (request == null || request.messageIds.isEmpty()) return@collect
                     markConversationRead(request.conversationId, request.peerId)
-                        .onFailure { showError("发送已读回执失败：${it.message ?: "未知错误"}") }
+                        .onFailure { showError(AppString.READ_RECEIPT_FAILED, it.message) }
                 }
         }
     }
 
-    private fun launchAction(errorPrefix: String, action: suspend () -> Unit) {
+    private fun launchAction(errorMessage: AppString, action: suspend () -> Unit) {
         viewModelScope.launch {
             try {
                 action()
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                showError("$errorPrefix：${exception.message ?: "未知错误"}")
+                showError(errorMessage, exception.message)
             }
         }
     }
 
+    private fun showMessage(message: AppString, vararg formatArgs: Any) {
+        mutableNotice.value = UiNotice(
+            text = LocalizedText.Resource(message, formatArgs.toList()),
+            isError = false,
+        )
+    }
+
+    private fun showError(message: AppString, detail: String? = null) {
+        mutableNotice.value = UiNotice(
+            text = LocalizedText.Resource(message, detail = detail),
+            isError = true,
+        )
+    }
+
     private fun showError(message: String) {
-        mutableNotice.value = UiNotice(message, isError = true)
+        mutableNotice.value = UiNotice(LocalizedText.Raw(message), isError = true)
     }
 
     private fun <T> kotlinx.coroutines.flow.Flow<T>.toUiState(initial: T): StateFlow<T> =
@@ -246,7 +270,7 @@ data class ChatSelection(
 )
 
 data class UiNotice(
-    val message: String,
+    val text: LocalizedText,
     val isError: Boolean,
 )
 

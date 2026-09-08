@@ -47,6 +47,20 @@ class SqlDelightPeerRepository(
         .findPeerById(peerId, ::mapPeer)
         .executeAsOneOrNull()
 
+    override suspend fun deletePeer(peerId: String, deleteHistory: Boolean) {
+        queries.transaction {
+            queries.deleteTrustedIdentityForPeer(peerId)
+            if (deleteHistory) {
+                queries.deleteMessagesForPeer(peerId)
+                queries.deleteFileMessagesForPeer(peerId)
+                queries.deleteConversationsForPeer(peerId)
+                queries.deletePeerById(peerId)
+            } else {
+                queries.hidePeer(peerId)
+            }
+        }
+    }
+
     override suspend fun markAllOffline() {
         queries.markAllPeersOffline()
     }

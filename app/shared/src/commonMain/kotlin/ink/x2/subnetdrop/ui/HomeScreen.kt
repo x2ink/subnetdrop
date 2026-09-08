@@ -2,6 +2,7 @@ package ink.x2.subnetdrop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Refresh
@@ -29,8 +31,12 @@ import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +70,8 @@ import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.model.PeerAvailability
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.presentation.HomeSection
+import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.appString
 import ink.x2.subnetdrop.runtime.RuntimeState
 import ink.x2.subnetdrop.runtime.RuntimeStartupPhase
 
@@ -73,6 +81,7 @@ fun HomeScreen(
     modifier: Modifier,
     onSectionSelected: (HomeSection) -> Unit,
     onPeerSelected: (Peer) -> Unit,
+    onDeletePeer: (String, Boolean) -> Unit,
     onRefreshPeers: () -> Unit,
     onRetry: () -> Unit,
     onDisplayNameChanged: (String) -> Unit,
@@ -89,7 +98,10 @@ fun HomeScreen(
         floatingActionButton = {
             if (state.section == HomeSection.NEARBY) {
                 FloatingActionButton(onClick = onRefreshPeers, shape = RoundedCornerShape(999.dp)) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "刷新附近设备")
+                    Icon(
+                        Icons.Outlined.Refresh,
+                        contentDescription = appString(AppString.REFRESH_NEARBY_DEVICES),
+                    )
                 }
             }
         },
@@ -98,7 +110,12 @@ fun HomeScreen(
             HomeHeader(state.localDisplayName)
             RuntimeBanner(state.runtimeState, onRetry)
             when (state.section) {
-                HomeSection.NEARBY -> PeerList(state.peers, Modifier.weight(1f), onPeerSelected)
+                HomeSection.NEARBY -> PeerList(
+                    peers = state.peers,
+                    modifier = Modifier.weight(1f),
+                    onPeerSelected = onPeerSelected,
+                    onDeletePeer = onDeletePeer,
+                )
                 HomeSection.SETTINGS -> SettingsPanel(
                     deviceId = state.localDeviceId,
                     displayName = state.localDisplayName,
@@ -142,7 +159,7 @@ private fun HomeHeader(displayName: String?) {
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text("SubnetDrop", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                text = displayName ?: "正在读取本机资料…",
+                text = displayName ?: appString(AppString.LOADING_LOCAL_PROFILE),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -172,7 +189,7 @@ private fun RuntimeBanner(state: RuntimeState, onRetry: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             if (state is RuntimeState.Failed || state is RuntimeState.Stopped) {
-                TextButton(onClick = onRetry) { Text("重试") }
+                TextButton(onClick = onRetry) { Text(appString(AppString.ACTION_RETRY)) }
             }
         }
     }
@@ -182,12 +199,12 @@ private fun RuntimeBanner(state: RuntimeState, onRetry: () -> Unit) {
 private fun SectionSelector(selected: HomeSection, onSelected: (HomeSection) -> Unit) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
         SectionItem(
-            label = "附近设备",
+            label = appString(AppString.NEARBY_DEVICES),
             icon = Icons.Outlined.Devices,
             selected = selected == HomeSection.NEARBY,
         ) { onSelected(HomeSection.NEARBY) }
         SectionItem(
-            label = "设置",
+            label = appString(AppString.SETTINGS),
             icon = Icons.Outlined.Settings,
             selected = selected == HomeSection.SETTINGS,
         ) { onSelected(HomeSection.SETTINGS) }
@@ -205,47 +222,153 @@ private fun RowScope.SectionItem(label: String, icon: ImageVector, selected: Boo
 }
 
 @Composable
-private fun PeerList(peers: List<Peer>, modifier: Modifier, onPeerSelected: (Peer) -> Unit) {
+private fun PeerList(
+    peers: List<Peer>,
+    modifier: Modifier,
+    onPeerSelected: (Peer) -> Unit,
+    onDeletePeer: (String, Boolean) -> Unit,
+) {
+    var deleteTarget by remember { mutableStateOf<Peer?>(null) }
     if (peers.isEmpty()) {
         EmptyState(
-            title = "暂未发现设备",
-            detail = "请确认其他设备已打开应用并连接同一 Wi-Fi",
+            title = appString(AppString.NO_DEVICES_TITLE),
+            detail = appString(AppString.NO_DEVICES_DETAIL),
             icon = Icons.Outlined.Devices,
             modifier = modifier,
         )
-        return
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(peers, key = Peer::id) { peer ->
+                PeerRow(
+                    peer = peer,
+                    onPeerSelected = onPeerSelected,
+                    onDeleteRequested = { deleteTarget = peer },
+                )
+            }
+        }
     }
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(peers, key = Peer::id) { peer -> PeerRow(peer, onPeerSelected) }
+    deleteTarget?.let { peer ->
+        DeletePeerDialog(
+            peer = peer,
+            onDismiss = { deleteTarget = null },
+            onConfirm = { deleteHistory ->
+                deleteTarget = null
+                onDeletePeer(peer.id, deleteHistory)
+            },
+        )
     }
 }
 
 @Composable
-private fun PeerRow(peer: Peer, onPeerSelected: (Peer) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable { onPeerSelected(peer) }) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            PeerAvatar(peer.displayName, peer.availability == PeerAvailability.ONLINE)
-            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(peer.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text(
-                    text = peer.trustState.label(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (peer.trustState == TrustState.KEY_CHANGED) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
+private fun PeerRow(
+    peer: Peer,
+    onPeerSelected: (Peer) -> Unit,
+    onDeleteRequested: () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .platformSecondaryClick { menuExpanded = true }
+                .combinedClickable(
+                    onClick = { onPeerSelected(peer) },
+                    onLongClickLabel = appString(AppString.DELETE_DEVICE),
+                    onLongClick = { menuExpanded = true },
+                ),
+        ) {
+            Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                PeerAvatar(peer.displayName, peer.availability == PeerAvailability.ONLINE)
+                Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                    Text(peer.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(
+                        text = peer.trustState.label(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (peer.trustState == TrustState.KEY_CHANGED) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Icon(
+                    Icons.Outlined.ChevronRight,
+                    contentDescription = appString(AppString.ACTION_OPEN),
                 )
             }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = "打开")
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(appString(AppString.DELETE_DEVICE)) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    menuExpanded = false
+                    onDeleteRequested()
+                },
+            )
         }
     }
+}
+
+@Composable
+private fun DeletePeerDialog(
+    peer: Peer,
+    onDismiss: () -> Unit,
+    onConfirm: (Boolean) -> Unit,
+) {
+    var deleteHistory by remember(peer.id) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(appString(AppString.DELETE_DEVICE_TITLE, peer.displayName)) },
+        text = {
+            Column {
+                Text(appString(AppString.DELETE_DEVICE_MESSAGE))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                        .clickable { deleteHistory = !deleteHistory },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = deleteHistory,
+                        onCheckedChange = { deleteHistory = it },
+                    )
+                    Column(Modifier.padding(start = 8.dp)) {
+                        Text(appString(AppString.DELETE_CHAT_HISTORY))
+                        Text(
+                            text = appString(AppString.DELETE_CHAT_HISTORY_DETAIL),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(deleteHistory) }) {
+                Text(appString(AppString.DELETE_DEVICE), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(appString(AppString.ACTION_CANCEL)) }
+        },
+    )
 }
 
 @Composable
@@ -356,14 +479,18 @@ private fun SettingsPanel(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Text("本机信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                appString(AppString.LOCAL_DEVICE_INFO),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
         item {
             OutlinedTextField(
                 value = draftName,
                 onValueChange = { if (it.length <= MAX_DISPLAY_NAME_LENGTH) draftName = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("设备名称") },
+                label = { Text(appString(AppString.DEVICE_NAME)) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
             )
@@ -374,29 +501,32 @@ private fun SettingsPanel(
                 enabled = draftName.isNotBlank() && draftName.trim() != displayName,
             ) {
                 Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("保存并重新发布", modifier = Modifier.padding(start = 8.dp))
+                Text(appString(AppString.SAVE_AND_REPUBLISH), modifier = Modifier.padding(start = 8.dp))
             }
         }
-        item { SettingValue(Icons.Outlined.Devices, "设备 ID", deviceId ?: "尚未就绪") }
+        item {
+            SettingValue(
+                Icons.Outlined.Devices,
+                appString(AppString.DEVICE_ID),
+                deviceId ?: appString(AppString.NOT_READY),
+            )
+        }
         item {
             Text(
-                text = "设置",
+                text = appString(AppString.SETTINGS),
                 modifier = Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-//        item { SettingValue(Icons.Outlined.Security, "端到端加密", "HPKE · X25519 · AES-256-GCM") }
-//        item { SettingValue(Icons.Outlined.Security, "身份签名", "Ed25519") }
-//        item { SettingValue(Icons.Outlined.Storage, "聊天记录", "仅保存在本机") }
         item {
             ToggleSetting(
                 icon = Icons.Outlined.Security,
-                label = "接收文件前确认",
+                label = appString(AppString.CONFIRM_BEFORE_RECEIVING),
                 detail = if (requireIncomingFileConfirmation) {
-                    "每次询问是否接收"
+                    appString(AppString.CONFIRM_EACH_FILE)
                 } else {
-                    "默认自动接收并开始传输"
+                    appString(AppString.AUTO_RECEIVE_FILES)
                 },
                 checked = requireIncomingFileConfirmation,
                 onCheckedChange = onIncomingFileConfirmationChanged,
@@ -416,7 +546,10 @@ private fun SettingsPanel(
                         modifier = Modifier.padding(top = 12.dp),
                     )
                     Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                        Text("单文件大小上限", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            appString(AppString.SINGLE_FILE_SIZE_LIMIT),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                         OutlinedTextField(
                             value = draftMaxFileSizeGiB,
                             onValueChange = { value ->
@@ -425,9 +558,17 @@ private fun SettingsPanel(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                            label = { Text("大小") },
+                            label = { Text(appString(AppString.SIZE)) },
                             suffix = { Text("GiB") },
-                            supportingText = { Text("可设置 $minFileSizeGiB–$maxFileSizeGiB GiB") },
+                            supportingText = {
+                                Text(
+                                    appString(
+                                        AppString.FILE_SIZE_RANGE,
+                                        minFileSizeGiB,
+                                        maxFileSizeGiB,
+                                    ),
+                                )
+                            },
                             isError = draftMaxFileSizeGiB.isNotEmpty() && !isMaxFileSizeValid,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
@@ -441,7 +582,7 @@ private fun SettingsPanel(
                                 parsedMaxFileSizeGiB * BYTES_PER_GIB != maxFileSizeBytes,
                             modifier = Modifier.padding(top = 8.dp),
                         ) {
-                            Text("保存上限")
+                            Text(appString(AppString.SAVE_LIMIT))
                         }
                     }
                 }
@@ -450,8 +591,11 @@ private fun SettingsPanel(
         item {
             SettingValue(
                 icon = Icons.Outlined.FolderOpen,
-                label = "文件保存位置",
-                value = displaySaveDirectory(saveDirectory),
+                label = appString(AppString.FILE_SAVE_LOCATION),
+                value = displaySaveDirectory(
+                    saveDirectory,
+                    appString(AppString.PUBLIC_DOWNLOADS_LOCATION),
+                ),
                 modifier = Modifier.clickable(onClick = launchDirectoryPicker),
                 trailingIcon = Icons.Outlined.ChevronRight,
             )
@@ -512,31 +656,39 @@ private fun SettingValue(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            trailingIcon?.let { Icon(it, contentDescription = "更改$label") }
+            trailingIcon?.let {
+                Icon(it, contentDescription = appString(AppString.CHANGE_SETTING, label))
+            }
         }
     }
 }
 
 private const val MAX_FILE_SIZE_INPUT_LENGTH = 4
 
+@Composable
 private fun RuntimeState.label(): String = when (this) {
-    RuntimeState.Stopped -> "局域网服务未启动"
+    RuntimeState.Stopped -> appString(AppString.RUNTIME_NOT_STARTED)
     is RuntimeState.Starting -> when (phase) {
-        RuntimeStartupPhase.LOADING_PROFILE -> "正在读取本机资料…"
-        RuntimeStartupPhase.RESETTING_PEERS -> "正在恢复设备状态…"
-        RuntimeStartupPhase.STARTING_TRANSPORT -> "正在启动消息接收服务…"
-        RuntimeStartupPhase.STARTING_DISCOVERY -> "正在启动附近设备发现…"
+        RuntimeStartupPhase.LOADING_PROFILE -> appString(AppString.LOADING_LOCAL_PROFILE)
+        RuntimeStartupPhase.RESETTING_PEERS -> appString(AppString.RUNTIME_RESETTING_PEERS)
+        RuntimeStartupPhase.STARTING_TRANSPORT -> appString(AppString.RUNTIME_STARTING_TRANSPORT)
+        RuntimeStartupPhase.STARTING_DISCOVERY -> appString(AppString.RUNTIME_STARTING_DISCOVERY)
     }
-    is RuntimeState.Running -> "已在线 · 仅同一局域网可见"
-    is RuntimeState.Degraded -> "服务异常：$reason"
-    is RuntimeState.Failed -> "启动失败：$reason"
+    is RuntimeState.Running -> appString(AppString.RUNTIME_ONLINE)
+    is RuntimeState.Degraded -> reason?.takeIf(String::isNotBlank)?.let {
+        appString(AppString.RUNTIME_DEGRADED, it)
+    } ?: appString(AppString.RUNTIME_DEGRADED_NO_DETAIL)
+    is RuntimeState.Failed -> reason?.takeIf(String::isNotBlank)?.let {
+        appString(AppString.RUNTIME_FAILED, it)
+    } ?: appString(AppString.RUNTIME_FAILED_NO_DETAIL)
 }
 
+@Composable
 private fun TrustState.label(): String = when (this) {
-    TrustState.UNPAIRED -> "未配对 · 点击建立信任"
-    TrustState.PENDING -> "等待确认"
-    TrustState.TRUSTED -> "已验证"
-    TrustState.KEY_CHANGED -> "安全密钥已变化，请重新核验"
+    TrustState.UNPAIRED -> appString(AppString.TRUST_UNPAIRED)
+    TrustState.PENDING -> appString(AppString.TRUST_PENDING)
+    TrustState.TRUSTED -> appString(AppString.TRUST_TRUSTED)
+    TrustState.KEY_CHANGED -> appString(AppString.TRUST_KEY_CHANGED)
 }
 
 private val ONLINE_COLOR = Color(0xFF2EAD68)

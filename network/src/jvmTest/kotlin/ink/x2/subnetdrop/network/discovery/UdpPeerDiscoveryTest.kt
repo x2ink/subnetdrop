@@ -152,6 +152,19 @@ class UdpPeerDiscoveryTest {
     }
 
     @Test
+    fun forgottenPeerStopsBeingAProbeTargetUntilRediscovered() {
+        val tracker = PeerLivenessTracker(offlineFailureThreshold = 3)
+        val peer = candidatePeer()
+        assertIs<DiscoveryEvent.Found>(tracker.record(peer, reachable = true, timestamp = 100L))
+
+        tracker.forget(peer.id)
+
+        assertEquals(emptyList(), tracker.allProbeTargets())
+        assertNull(tracker.record(peer, reachable = false, timestamp = 101L))
+        assertIs<DiscoveryEvent.Found>(tracker.record(peer, reachable = true, timestamp = 102L))
+    }
+
+    @Test
     fun recoveryAndEndpointChangesRefreshDatabaseState() {
         val tracker = PeerLivenessTracker(offlineFailureThreshold = 3)
         val peer = candidatePeer()

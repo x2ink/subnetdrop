@@ -31,4 +31,8 @@ class DesktopPeerDiscovery(
     override suspend fun refresh() {
         delegate.refresh()
     }
+
+    override suspend fun forget(peerId: String) {
+        delegate.forget(peerId)
+    }
 }

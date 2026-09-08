@@ -146,6 +146,33 @@ class SubnetDropTransportTest {
     }
 
     @Test
+    fun clearingPeerTransfersRemovesInMemoryFileMessagesOnBothSides() {
+        runBlocking {
+            val alice = TestNode("alice-clear", availablePort())
+            val bob = TestNode("bob-clear", availablePort())
+            alice.discover(bob)
+            bob.discover(alice)
+            alice.transport.start()
+            bob.transport.start()
+            try {
+                alice.pairWith(bob)
+                val source = File(alice.workingDirectory, "forgotten.txt").apply { writeText("history") }
+                alice.transport.sendFile(bob.id, LocalFile(source.name, source.path, source.length()))
+
+                alice.transport.clearPeerTransfers(bob.id)
+                bob.transport.clearPeerTransfers(alice.id)
+
+                assertTrue(alice.transport.transfers.value.isEmpty())
+                assertTrue(bob.transport.transfers.value.isEmpty())
+                assertTrue(bob.transport.incomingOffers.value.isEmpty())
+            } finally {
+                alice.transport.stop()
+                bob.transport.stop()
+            }
+        }
+    }
+
+    @Test
     fun rejectedOfferDoesNotTransferFileBytes() {
         runBlocking {
             val alice = TestNode("alice-reject", availablePort())
@@ -525,6 +552,10 @@ private class TestPeerRepository : PeerRepository {
     }
 
     override suspend fun findPeer(peerId: String): Peer? = peers.value.firstOrNull { it.id == peerId }
+
+    override suspend fun deletePeer(peerId: String, deleteHistory: Boolean) {
+        peers.value = peers.value.filterNot { it.id == peerId }
+    }
 
     override suspend fun markAllOffline() {
         peers.value = peers.value.map { it.copy(availability = PeerAvailability.OFFLINE) }

@@ -69,3 +69,7 @@ kotlin {
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
 }
+
+compose.resources {
+    packageOfResClass = "ink.x2.subnetdrop.resources"
+}

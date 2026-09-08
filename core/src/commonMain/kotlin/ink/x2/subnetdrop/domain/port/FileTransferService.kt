@@ -19,6 +19,8 @@ interface FileTransferService {
 
     suspend fun cancelTransfer(transferId: String)
 
+    suspend fun clearPeerTransfers(peerId: String)
+
     companion object {
         const val MAX_FILES_PER_BATCH = 50
         const val MAX_PARALLEL_OUTGOING_TRANSFERS = 3

@@ -15,6 +15,8 @@ interface PeerDiscovery {
 
     suspend fun refresh()
 
+    suspend fun forget(peerId: String)
+
     suspend fun stop()
 }
 

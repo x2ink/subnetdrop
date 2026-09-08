@@ -27,7 +27,7 @@ import java.io.File
 internal actual fun Modifier.platformFileDropTarget(
     maxFileSizeBytes: Long,
     onFilesDropped: (List<LocalFile>) -> Unit,
-    onError: (String) -> Unit,
+    onError: (FileInputError) -> Unit,
     onDragActiveChanged: (Boolean) -> Unit,
 ): Modifier {
     val scope = rememberCoroutineScope()
@@ -53,7 +53,9 @@ internal actual fun Modifier.platformFileDropTarget(
                 currentOnDragActiveChanged(false)
                 val droppedFiles = runCatching { event.awtTransferable.readRegularFiles() }
                     .getOrElse { failure ->
-                        currentOnError(failure.message ?: "无法读取拖入的文件")
+                        currentOnError(
+                            (failure as? FileInputException)?.error ?: FileInputError.DROPPED_FILES_READ_FAILED,
+                        )
                         return false
                     }
                 scope.launch {
@@ -65,7 +67,9 @@ internal actual fun Modifier.platformFileDropTarget(
                     } catch (exception: CancellationException) {
                         throw exception
                     } catch (exception: Exception) {
-                        currentOnError(exception.message ?: "无法读取拖入的文件")
+                        currentOnError(
+                            (exception as? FileInputException)?.error ?: FileInputError.DROPPED_FILES_READ_FAILED,
+                        )
                     }
                 }
                 return true
@@ -81,14 +85,18 @@ internal actual fun Modifier.platformFileDropTarget(
 }
 
 internal fun Transferable.readRegularFiles(): List<File> {
-    require(isDataFlavorSupported(DataFlavor.javaFileListFlavor)) { "仅支持拖入文件" }
-    val entries = getTransferData(DataFlavor.javaFileListFlavor) as? List<*>
-        ?: throw IllegalArgumentException("无法读取拖入的文件")
-    val files = entries.filterIsInstance<File>()
-    require(files.size == entries.size && files.isNotEmpty()) { "仅支持拖入文件" }
-    require(files.size <= FileTransferService.MAX_FILES_PER_BATCH) {
-        "一次最多发送 ${FileTransferService.MAX_FILES_PER_BATCH} 个文件"
+    if (!isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+        throw FileInputException(FileInputError.FILES_ONLY)
     }
-    require(files.all { it.isFile }) { "仅支持拖入普通文件，不支持文件夹" }
+    val entries = getTransferData(DataFlavor.javaFileListFlavor) as? List<*>
+        ?: throw FileInputException(FileInputError.DROPPED_FILES_READ_FAILED)
+    val files = entries.filterIsInstance<File>()
+    if (files.size != entries.size || files.isEmpty()) {
+        throw FileInputException(FileInputError.FILES_ONLY)
+    }
+    if (files.size > FileTransferService.MAX_FILES_PER_BATCH) {
+        throw FileInputException(FileInputError.TOO_MANY_FILES)
+    }
+    if (files.any { !it.isFile }) throw FileInputException(FileInputError.REGULAR_FILES_ONLY)
     return files
 }

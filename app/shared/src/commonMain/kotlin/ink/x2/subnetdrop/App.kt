@@ -31,6 +31,7 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
 import ink.x2.subnetdrop.presentation.ChatSelection
 import ink.x2.subnetdrop.presentation.SubnetDropViewModel
+import ink.x2.subnetdrop.resources.resolve
 import ink.x2.subnetdrop.ui.ChatScreen
 import ink.x2.subnetdrop.ui.HomeScreen
 import ink.x2.subnetdrop.ui.IncomingFileDialog
@@ -42,8 +43,9 @@ fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
     val ui = rememberAppUiState(viewModel)
     val snackbarHostState = remember { SnackbarHostState() }
     ui.notice?.let { notice ->
+        val message = notice.text.resolve()
         LaunchedEffect(notice) {
-            snackbarHostState.showSnackbar(notice.message)
+            snackbarHostState.showSnackbar(message)
             viewModel.clearNotice()
         }
     }
@@ -97,6 +99,7 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             modifier = Modifier.width(sidebarWidth),
             onSectionSelected = viewModel::selectSection,
             onPeerSelected = viewModel::openPeer,
+            onDeletePeer = viewModel::deletePeer,
             onRefreshPeers = viewModel::refreshPeers,
             onRetry = viewModel::retryRuntime,
             onDisplayNameChanged = viewModel::updateDisplayName,
@@ -145,6 +148,7 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         modifier = Modifier.fillMaxSize(),
                         onSectionSelected = viewModel::selectSection,
                         onPeerSelected = viewModel::openPeer,
+                        onDeletePeer = viewModel::deletePeer,
                         onRefreshPeers = viewModel::refreshPeers,
                         onRetry = viewModel::retryRuntime,
                         onDisplayNameChanged = viewModel::updateDisplayName,

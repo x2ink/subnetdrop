@@ -77,6 +77,8 @@ import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.presentation.ChatSelection
+import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.appString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -103,14 +105,18 @@ fun ChatScreen(
         return
     }
     val launchFilePicker = rememberFilePickerLauncher(maxFileSizeBytes, onSendFiles, onFilePickerError)
+    val inputMessages = fileInputMessages()
     val timelineListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var isFileDragActive by remember { mutableStateOf(false) }
+    val openFileFailed = appString(AppString.OPEN_FILE_FAILED)
     val openFile = { transfer: FileTransfer ->
         runCatching {
             FileKit.openFileWithDefaultApplication(PlatformFile(requireNotNull(transfer.localPath)))
         }.onFailure { failure ->
-            onFilePickerError(failure.message ?: "无法使用系统应用打开文件")
+            onFilePickerError(
+                inputMessages.withDetail(openFileFailed, failure.message),
+            )
         }
         Unit
     }
@@ -121,7 +127,7 @@ fun ChatScreen(
             .platformFileDropTarget(
                 maxFileSizeBytes = maxFileSizeBytes,
                 onFilesDropped = onSendFiles,
-                onError = onFilePickerError,
+                onError = { error -> onFilePickerError(inputMessages.forError(error)) },
                 onDragActiveChanged = { isFileDragActive = it },
             ),
     ) {
@@ -176,14 +182,17 @@ private fun FileDropOverlay() {
                 tint = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = "松开发送文件",
+                text = appString(AppString.DROP_FILES),
                 modifier = Modifier.padding(top = 14.dp),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-                text = "支持一次拖入最多 ${FileTransferService.MAX_FILES_PER_BATCH} 个文件",
+                text = appString(
+                    AppString.DROP_FILES_LIMIT,
+                    FileTransferService.MAX_FILES_PER_BATCH,
+                ),
                 modifier = Modifier.padding(top = 6.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -201,7 +210,10 @@ private fun ChatHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
         ) {
             if (showBack) {
                 IconButton(onClick = onBack, modifier = Modifier.padding(end = 4.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = appString(AppString.CONTENT_BACK),
+                    )
                 }
             }
             PeerAvatar(title)
@@ -223,7 +235,7 @@ private fun ChatHeader(title: String, showBack: Boolean, onBack: () -> Unit) {
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = "加密聊天",
+                        text = appString(AppString.ENCRYPTED_CHAT),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -366,7 +378,7 @@ private fun DeliveryState(message: Message, onRetryMessage: (Message) -> Unit) {
             },
         )
         Text(
-            text = if (failed) "发送失败，点击重试" else message.status.label(),
+            text = if (failed) appString(AppString.SEND_FAILED_RETRY) else message.status.label(),
             style = MaterialTheme.typography.labelSmall,
             color = when {
                 failed -> MaterialTheme.colorScheme.error
@@ -483,7 +495,10 @@ private fun FileTransferMessage(
                 }
                 if (cancellable) {
                     IconButton(onClick = { onCancelFile(transfer.id) }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "取消文件传输")
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = appString(AppString.CANCEL_FILE_TRANSFER),
+                        )
                     }
                 }
             }
@@ -509,7 +524,10 @@ private fun Composer(
             verticalAlignment = Alignment.Bottom,
         ) {
             IconButton(onClick = onAttachFile, modifier = Modifier.size(52.dp)) {
-                Icon(Icons.Outlined.AttachFile, contentDescription = "发送文件")
+                Icon(
+                    Icons.Outlined.AttachFile,
+                    contentDescription = appString(AppString.SEND_FILE),
+                )
             }
             OutlinedTextField(
                 value = text,
@@ -520,7 +538,7 @@ private fun Composer(
                     .onFocusChanged { state ->
                         if (state.isFocused) onInputFocused()
                     },
-                placeholder = { Text("输入消息…") },
+                placeholder = { Text(appString(AppString.MESSAGE_PLACEHOLDER)) },
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 5,
             )
@@ -529,7 +547,10 @@ private fun Composer(
                 modifier = Modifier.size(52.dp),
                 enabled = text.isNotBlank(),
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送消息")
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
+                    contentDescription = appString(AppString.SEND_MESSAGE),
+                )
             }
         }
     }
@@ -552,13 +573,13 @@ private fun EmptyChat(modifier: Modifier) {
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "选择一个已配对设备",
+                    text = appString(AppString.SELECT_PAIRED_DEVICE),
                     modifier = Modifier.padding(top = 16.dp),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "开始安全的一对一聊天",
+                    text = appString(AppString.START_SECURE_CHAT),
                     modifier = Modifier.padding(top = 6.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -574,38 +595,46 @@ private fun DeliveryStatus.icon(): ImageVector = when (this) {
     DeliveryStatus.FAILED -> Icons.Outlined.ErrorOutline
 }
 
+@Composable
 private fun DeliveryStatus.label(): String = when (this) {
-    DeliveryStatus.PENDING -> "等待发送"
-    DeliveryStatus.SENDING -> "发送中"
-    DeliveryStatus.SENT -> "已发送"
-    DeliveryStatus.DELIVERED -> "未读"
-    DeliveryStatus.READ -> "已读"
-    DeliveryStatus.FAILED -> "发送失败"
+    DeliveryStatus.PENDING -> appString(AppString.DELIVERY_PENDING)
+    DeliveryStatus.SENDING -> appString(AppString.DELIVERY_SENDING)
+    DeliveryStatus.SENT -> appString(AppString.DELIVERY_SENT)
+    DeliveryStatus.DELIVERED -> appString(AppString.DELIVERY_UNREAD)
+    DeliveryStatus.READ -> appString(AppString.DELIVERY_READ)
+    DeliveryStatus.FAILED -> appString(AppString.DELIVERY_FAILED)
 }
 
+@Composable
 private fun FileTransferStatus.label(): String = when (this) {
-    FileTransferStatus.PREPARING -> "正在校验"
-    FileTransferStatus.WAITING_FOR_ACCEPTANCE -> "等待对方接收"
-    FileTransferStatus.TRANSFERRING -> "传输中"
-    FileTransferStatus.COMPLETED -> "已完成"
-    FileTransferStatus.REJECTED -> "已拒绝"
-    FileTransferStatus.CANCELLED -> "已取消"
-    FileTransferStatus.FAILED -> "传输失败"
+    FileTransferStatus.PREPARING -> appString(AppString.FILE_PREPARING)
+    FileTransferStatus.WAITING_FOR_ACCEPTANCE -> appString(AppString.FILE_WAITING_FOR_ACCEPTANCE)
+    FileTransferStatus.TRANSFERRING -> appString(AppString.FILE_TRANSFERRING)
+    FileTransferStatus.COMPLETED -> appString(AppString.FILE_COMPLETED)
+    FileTransferStatus.REJECTED -> appString(AppString.FILE_REJECTED)
+    FileTransferStatus.CANCELLED -> appString(AppString.FILE_CANCELLED)
+    FileTransferStatus.FAILED -> appString(AppString.FILE_FAILED)
 }
 
+@Composable
 private fun FileTransfer.summary(expired: Boolean): String = if (expired) {
-    "已失效 · ${formatFileSize(size)}"
+    appString(AppString.FILE_EXPIRED_SUMMARY, formatFileSize(size))
 } else {
     when (status) {
         FileTransferStatus.PREPARING,
         FileTransferStatus.WAITING_FOR_ACCEPTANCE,
         FileTransferStatus.TRANSFERRING,
-        -> "${status.label()} · ${formatFileSize(transferredBytes)} / ${formatFileSize(size)}"
+        -> appString(
+            AppString.FILE_PROGRESS_SUMMARY,
+            status.label(),
+            formatFileSize(transferredBytes),
+            formatFileSize(size),
+        )
         FileTransferStatus.COMPLETED,
         FileTransferStatus.REJECTED,
         FileTransferStatus.CANCELLED,
         FileTransferStatus.FAILED,
-        -> "${status.label()} · ${formatFileSize(size)}"
+        -> appString(AppString.FILE_TERMINAL_SUMMARY, status.label(), formatFileSize(size))
     }
 }
 

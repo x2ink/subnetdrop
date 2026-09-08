@@ -65,7 +65,7 @@ UI 和用例依赖接口，不直接拼 SQL。SQLDelight 适配器负责查询�
 | 表 | 持久内容 |
 |---|---|
 | `deviceProfileEntity` | 本机稳定设备 ID 与显示名称 |
-| `peerEntity` | 已发现设备、当前地址、在线状态和信任状态 |
+| `peerEntity` | 已发现设备、当前地址、在线状态、信任状态和列表隐藏标记 |
 | `trustedIdentityEntity` | 经确认的远端 HPKE/Ed25519 公钥和确认时间 |
 | `conversationEntity` | 一对一会话与最后更新时间 |
 | `messageEntity` | 正文、方向、送达状态和本地已读标记 |
@@ -73,6 +73,16 @@ UI 和用例依赖接口，不直接拼 SQL。SQLDelight 适配器负责查询�
 
 会话 ID 由双方设备 ID 确定，消息按 `createdAt` 与 ID 排序。打开会话会把 incoming 行标为已读并清除未读数；
 只有网络回执验证成功后，远端 outgoing 行才变成 `READ`。
+
+## 忘记设备
+
+设备删除属于 peer 聚合的事务操作。始终删除 `trustedIdentityEntity` 并把目标从发现跟踪器移除；不删除历史时，
+`peerEntity` 保留为隐藏、离线且未配对，以继续满足 conversation 外键。设备再次公告后，正常 upsert 会清除隐藏标记，
+但必须重新核对安全码。
+
+选择同时删除历史时，事务按文字消息、文件消息、conversation、peer 的顺序显式删除，不依赖各平台是否默认启用
+SQLite foreign keys。文件消息中的路径只是记录，已经保存到磁盘的实体文件不会被删除。SQLDelight 查询失效会让
+Compose 观察的 Flow/StateFlow 自动刷新，无需 UI 手工维护第二份设备列表。
 
 ## 存储边界
 

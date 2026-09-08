@@ -47,6 +47,10 @@ never treated as stable identity. Tapping the refresh action on the Nearby scree
 announcement and probes every remembered endpoint without waiting for its heartbeat or offline-backoff deadline. Manual
 refresh does not restart the chat transport or clear peers, trust, or history.
 
+Android users can long-press a nearby peer and desktop users can right-click it to open the device action menu. Forgetting
+a peer removes its verified identity and current discovery target. The confirmation dialog can optionally delete that
+peer's text and file-message history; downloaded files remain on disk. A peer discovered again must be paired again.
+
 ### Pairing
 
 An untrusted peer connection exchanges public identity bundles. Both devices derive the same human-verifiable safety code from the canonical ordering of the public bundles. A peer becomes trusted only after local user confirmation. A changed public key for an existing device ID blocks messages and raises a safety warning.

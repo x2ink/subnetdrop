@@ -8,6 +8,6 @@ import ink.x2.subnetdrop.domain.model.LocalFile
 internal expect fun Modifier.platformFileDropTarget(
     maxFileSizeBytes: Long,
     onFilesDropped: (List<LocalFile>) -> Unit,
-    onError: (String) -> Unit,
+    onError: (FileInputError) -> Unit,
     onDragActiveChanged: (Boolean) -> Unit,
 ): Modifier

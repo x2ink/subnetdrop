@@ -342,6 +342,24 @@ class SubnetDropTransport(
         )
     }
 
+    override suspend fun clearPeerTransfers(peerId: String) {
+        val sessions = transferMutex.withLock {
+            val transferIds = mutableTransfers.value
+                .filter { it.peerId == peerId }
+                .mapTo(mutableSetOf(), FileTransfer::id)
+            cancelledTransfers += transferIds
+            transferIds.forEach { pendingDecisions.remove(it)?.complete(false) }
+            val peerSessions = incomingSessions.values.filter { it.peerId == peerId }
+            peerSessions.forEach { incomingSessions.remove(it.transferId) }
+            mutableIncomingOffers.value = mutableIncomingOffers.value.filterNot { it.peerId == peerId }
+            mutableTransfers.value = mutableTransfers.value.filterNot { it.peerId == peerId }
+            peerSessions
+        }
+        sessions.forEach { session ->
+            session.ioMutex.withLock { session.target?.discard() }
+        }
+    }
+
     override suspend fun requestPairing(peerId: String) {
         val localIdentity = localIdentityService.get()
         val response = exchange(
@@ -1061,10 +1079,14 @@ class SubnetDropTransport(
                     transfer
                 }
             }
-            require(found) { "Transfer does not exist" }
-            requireNotNull(updated)
+            if (!found) {
+                check(transferId in cancelledTransfers) { "Transfer does not exist" }
+                null
+            } else {
+                requireNotNull(updated)
+            }
         }
-        if (!updatedTransfer.status.isActive()) {
+        if (updatedTransfer != null && !updatedTransfer.status.isActive()) {
             chatRepository.saveFileMessage(updatedTransfer)
         }
     }

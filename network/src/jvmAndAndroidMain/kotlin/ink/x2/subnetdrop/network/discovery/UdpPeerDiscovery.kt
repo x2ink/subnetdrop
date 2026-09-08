@@ -47,7 +47,8 @@ internal class UdpPeerDiscovery(
     private val lifecycleMutex = Mutex()
     private val peerMutex = Mutex()
     private val livenessTracker = PeerLivenessTracker(OFFLINE_FAILURE_THRESHOLD)
-    private val probesInFlight = mutableSetOf<String>()
+    private val probeGenerations = mutableMapOf<String, Long>()
+    private val probesInFlight = mutableMapOf<String, Long>()
     private var sessionScope: CoroutineScope? = null
     private var sessionJob: Job? = null
     private var sockets: List<MulticastSocket> = emptyList()
@@ -99,6 +100,7 @@ internal class UdpPeerDiscovery(
                 activeJob.cancelAndJoin()
                 peerMutex.withLock {
                     livenessTracker.clear()
+                    probeGenerations.clear()
                     probesInFlight.clear()
                 }
                 releaseMulticast()
@@ -112,6 +114,14 @@ internal class UdpPeerDiscovery(
             withContext(Dispatchers.IO) { sendAnnouncement() }
             val peers = peerMutex.withLock { livenessTracker.allProbeTargets() }
             peers.forEach(::scheduleProbe)
+        }
+    }
+
+    override suspend fun forget(peerId: String) {
+        peerMutex.withLock {
+            livenessTracker.forget(peerId)
+            probeGenerations[peerId] = (probeGenerations[peerId] ?: 0L) + 1L
+            probesInFlight.remove(peerId)
         }
     }
 
@@ -178,24 +188,29 @@ internal class UdpPeerDiscovery(
     private fun scheduleProbe(peer: Peer) {
         val scope = sessionScope ?: return
         scope.launch {
-            val shouldProbe = peerMutex.withLock { probesInFlight.add(peer.id) }
-            if (!shouldProbe) return@launch
+            val generation = peerMutex.withLock {
+                if (peer.id in probesInFlight) return@withLock null
+                (probeGenerations[peer.id] ?: 0L).also { probesInFlight[peer.id] = it }
+            } ?: return@launch
             try {
-                recordProbeResult(peer, reachabilityProbe.isReachable(peer))
+                recordProbeResult(peer, reachabilityProbe.isReachable(peer), generation)
             } catch (exception: CancellationException) {
                 throw exception
             } catch (_: Exception) {
-                recordProbeResult(peer, reachable = false)
+                recordProbeResult(peer, reachable = false, generation)
             } finally {
                 withContext(NonCancellable) {
-                    peerMutex.withLock { probesInFlight.remove(peer.id) }
+                    peerMutex.withLock {
+                        if (probesInFlight[peer.id] == generation) probesInFlight.remove(peer.id)
+                    }
                 }
             }
         }
     }
 
-    private suspend fun recordProbeResult(peer: Peer, reachable: Boolean) {
+    private suspend fun recordProbeResult(peer: Peer, reachable: Boolean, generation: Long) {
         val event = peerMutex.withLock {
+            if ((probeGenerations[peer.id] ?: 0L) != generation) return@withLock null
             livenessTracker.record(peer, reachable, timestampProvider.nowMillis())
         }
         event?.let { mutableEvents.emit(it) }
@@ -356,6 +371,10 @@ internal class PeerLivenessTracker(
 
     fun clear() {
         trackedPeers.clear()
+    }
+
+    fun forget(peerId: String) {
+        trackedPeers.remove(peerId)
     }
 
     fun record(peer: Peer, reachable: Boolean, timestamp: Long): DiscoveryEvent? {

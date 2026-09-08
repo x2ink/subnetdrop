@@ -18,6 +18,8 @@ import io.github.vinceglb.filekit.size
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.PUBLIC_DOWNLOADS_LOCATION
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.port.FileTransferService
+import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.appString
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -29,9 +31,10 @@ fun rememberFilePickerLauncher(
     onError: (String) -> Unit,
 ): () -> Unit {
     val scope = rememberCoroutineScope()
+    val messages = fileInputMessages()
     val launcher = rememberFileKitPickerLauncher(
         mode = FileKitMode.Multiple(maxItems = FileTransferService.MAX_FILES_PER_BATCH),
-        onError = { failure -> onError(failure.message ?: "无法打开文件选择器") },
+        onError = { failure -> onError(messages.withDetail(messages.filePickerOpenFailed, failure.message)) },
         onResult = { selected ->
             selected ?: return@rememberFileKitPickerLauncher
             scope.launch {
@@ -40,7 +43,7 @@ fun rememberFilePickerLauncher(
                 } catch (exception: CancellationException) {
                     throw exception
                 } catch (exception: Exception) {
-                    onError(exception.message ?: "无法读取所选文件")
+                    onError(messages.forException(exception, messages.selectedFilesReadFailed))
                 }
             }
         },
@@ -55,11 +58,12 @@ fun rememberSaveDirectoryPickerLauncher(
     onError: (String) -> Unit,
 ): () -> Unit {
     val scope = rememberCoroutineScope()
+    val messages = fileInputMessages()
     val launcher = rememberDirectoryPickerLauncher(
         directory = currentDirectory
             .takeIf { it.isNotBlank() && it != PUBLIC_DOWNLOADS_LOCATION }
             ?.let(::PlatformFile),
-        onError = { failure -> onError(failure.message ?: "无法打开目录选择器") },
+        onError = { failure -> onError(messages.withDetail(messages.directoryPickerOpenFailed, failure.message)) },
         onResult = { selected ->
             selected ?: return@rememberDirectoryPickerLauncher
             scope.launch {
@@ -68,7 +72,9 @@ fun rememberSaveDirectoryPickerLauncher(
                     selected.path
                 }
                     .onSuccess(onDirectorySelected)
-                    .onFailure { failure -> onError(failure.message ?: "无法保存目录访问权限") }
+                    .onFailure { failure ->
+                        onError(messages.withDetail(messages.directoryAccessSaveFailed, failure.message))
+                    }
             }
         },
     )
@@ -76,9 +82,9 @@ fun rememberSaveDirectoryPickerLauncher(
 }
 
 internal suspend fun List<PlatformFile>.toTransferFiles(maxFileSizeBytes: Long): List<LocalFile> {
-    require(isNotEmpty()) { "没有可发送的文件" }
-    require(size <= FileTransferService.MAX_FILES_PER_BATCH) {
-        "一次最多发送 ${FileTransferService.MAX_FILES_PER_BATCH} 个文件"
+    if (isEmpty()) throw FileInputException(FileInputError.NO_FILES)
+    if (size > FileTransferService.MAX_FILES_PER_BATCH) {
+        throw FileInputException(FileInputError.TOO_MANY_FILES)
     }
     return map { it.toTransferFile(maxFileSizeBytes) }
 }
@@ -87,11 +93,11 @@ private suspend fun PlatformFile.toTransferFile(maxFileSizeBytes: Long): LocalFi
     val originalName = name
     val originalContentType = mimeType()?.toString()
     val originalSize = size()
-    require(originalSize >= 0) { "无法确定所选文件大小" }
-    require(originalSize <= maxFileSizeBytes) { "所选文件超过本机设置的大小上限" }
+    if (originalSize < 0) throw FileInputException(FileInputError.SIZE_UNKNOWN)
+    if (originalSize > maxFileSizeBytes) throw FileInputException(FileInputError.FILE_TOO_LARGE)
     val transferSource = if (path.startsWith(CONTENT_URI_PREFIX)) copyProviderFileToCache() else this
     val fileSize = transferSource.size()
-    require(fileSize == originalSize) { "所选文件在准备传输时发生变化" }
+    if (fileSize != originalSize) throw FileInputException(FileInputError.FILE_CHANGED)
     return LocalFile(
         name = originalName,
         path = transferSource.path,
@@ -113,5 +119,55 @@ private suspend fun PlatformFile.copyProviderFileToCache(): PlatformFile {
 private const val CONTENT_URI_PREFIX = "content://"
 private const val OUTGOING_CACHE_DIRECTORY = "outgoing-files"
 
-internal fun displaySaveDirectory(saveDirectory: String): String =
-    if (saveDirectory == PUBLIC_DOWNLOADS_LOCATION) "公共下载目录/Download/SubnetDrop" else saveDirectory
+internal fun displaySaveDirectory(saveDirectory: String, publicDownloadsLabel: String): String =
+    if (saveDirectory == PUBLIC_DOWNLOADS_LOCATION) publicDownloadsLabel else saveDirectory
+
+internal enum class FileInputError {
+    NO_FILES,
+    TOO_MANY_FILES,
+    SIZE_UNKNOWN,
+    FILE_TOO_LARGE,
+    FILE_CHANGED,
+    DROPPED_FILES_READ_FAILED,
+    FILES_ONLY,
+    REGULAR_FILES_ONLY,
+}
+
+internal class FileInputException(val error: FileInputError) : IllegalArgumentException()
+
+internal data class FileInputMessages(
+    val filePickerOpenFailed: String,
+    val selectedFilesReadFailed: String,
+    val directoryPickerOpenFailed: String,
+    val directoryAccessSaveFailed: String,
+    private val messages: Map<FileInputError, String>,
+) {
+    fun forError(error: FileInputError): String = checkNotNull(messages[error])
+
+    fun forException(exception: Exception, fallback: String): String =
+        (exception as? FileInputException)?.let { forError(it.error) } ?: withDetail(fallback, exception.message)
+
+    fun withDetail(prefix: String, detail: String?): String =
+        detail?.takeIf(String::isNotBlank)?.let { "$prefix — $it" } ?: prefix
+}
+
+@Composable
+internal fun fileInputMessages(): FileInputMessages = FileInputMessages(
+    filePickerOpenFailed = appString(AppString.FILE_PICKER_OPEN_FAILED),
+    selectedFilesReadFailed = appString(AppString.SELECTED_FILES_READ_FAILED),
+    directoryPickerOpenFailed = appString(AppString.DIRECTORY_PICKER_OPEN_FAILED),
+    directoryAccessSaveFailed = appString(AppString.DIRECTORY_ACCESS_SAVE_FAILED),
+    messages = mapOf(
+        FileInputError.NO_FILES to appString(AppString.FILE_NONE_SELECTED),
+        FileInputError.TOO_MANY_FILES to appString(
+            AppString.FILE_BATCH_TOO_LARGE,
+            FileTransferService.MAX_FILES_PER_BATCH,
+        ),
+        FileInputError.SIZE_UNKNOWN to appString(AppString.FILE_SIZE_UNKNOWN),
+        FileInputError.FILE_TOO_LARGE to appString(AppString.FILE_TOO_LARGE),
+        FileInputError.FILE_CHANGED to appString(AppString.FILE_CHANGED),
+        FileInputError.DROPPED_FILES_READ_FAILED to appString(AppString.DROPPED_FILES_READ_FAILED),
+        FileInputError.FILES_ONLY to appString(AppString.DROP_FILES_ONLY),
+        FileInputError.REGULAR_FILES_ONLY to appString(AppString.DROP_REGULAR_FILES_ONLY),
+    ),
+)

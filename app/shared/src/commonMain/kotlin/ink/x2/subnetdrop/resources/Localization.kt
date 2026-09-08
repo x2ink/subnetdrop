@@ -1,0 +1,151 @@
+package ink.x2.subnetdrop.resources
+
+import androidx.compose.runtime.Composable
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
+
+enum class AppString(internal val resource: StringResource) {
+    ACTION_RETRY(Res.string.action_retry),
+    ACTION_CANCEL(Res.string.action_cancel),
+    ACTION_OPEN(Res.string.action_open),
+    ACTION_RECEIVE(Res.string.action_receive),
+    ACTION_REJECT(Res.string.action_reject),
+    CONTENT_BACK(Res.string.content_back),
+    ERROR_WITH_DETAIL(Res.string.error_with_detail),
+    LOADING_LOCAL_PROFILE(Res.string.loading_local_profile),
+    REFRESH_NEARBY_DEVICES(Res.string.refresh_nearby_devices),
+    NEARBY_DEVICES(Res.string.nearby_devices),
+    SETTINGS(Res.string.settings),
+    NO_DEVICES_TITLE(Res.string.no_devices_title),
+    NO_DEVICES_DETAIL(Res.string.no_devices_detail),
+    DELETE_DEVICE(Res.string.delete_device),
+    DELETE_DEVICE_TITLE(Res.string.delete_device_title),
+    DELETE_DEVICE_MESSAGE(Res.string.delete_device_message),
+    DELETE_CHAT_HISTORY(Res.string.delete_chat_history),
+    DELETE_CHAT_HISTORY_DETAIL(Res.string.delete_chat_history_detail),
+    DELETE_DEVICE_FAILED(Res.string.delete_device_failed),
+    DEVICE_DELETED(Res.string.device_deleted),
+    LOCAL_DEVICE_INFO(Res.string.local_device_info),
+    DEVICE_NAME(Res.string.device_name),
+    SAVE_AND_REPUBLISH(Res.string.save_and_republish),
+    DEVICE_ID(Res.string.device_id),
+    NOT_READY(Res.string.not_ready),
+    CONFIRM_BEFORE_RECEIVING(Res.string.confirm_before_receiving),
+    CONFIRM_EACH_FILE(Res.string.confirm_each_file),
+    AUTO_RECEIVE_FILES(Res.string.auto_receive_files),
+    SINGLE_FILE_SIZE_LIMIT(Res.string.single_file_size_limit),
+    SIZE(Res.string.size),
+    FILE_SIZE_RANGE(Res.string.file_size_range),
+    SAVE_LIMIT(Res.string.save_limit),
+    FILE_SAVE_LOCATION(Res.string.file_save_location),
+    CHANGE_SETTING(Res.string.change_setting),
+    PUBLIC_DOWNLOADS_LOCATION(Res.string.public_downloads_location),
+    RUNTIME_NOT_STARTED(Res.string.runtime_not_started),
+    RUNTIME_RESETTING_PEERS(Res.string.runtime_resetting_peers),
+    RUNTIME_STARTING_TRANSPORT(Res.string.runtime_starting_transport),
+    RUNTIME_STARTING_DISCOVERY(Res.string.runtime_starting_discovery),
+    RUNTIME_ONLINE(Res.string.runtime_online),
+    RUNTIME_DEGRADED(Res.string.runtime_degraded),
+    RUNTIME_DEGRADED_NO_DETAIL(Res.string.runtime_degraded_no_detail),
+    RUNTIME_FAILED(Res.string.runtime_failed),
+    RUNTIME_FAILED_NO_DETAIL(Res.string.runtime_failed_no_detail),
+    TRUST_UNPAIRED(Res.string.trust_unpaired),
+    TRUST_PENDING(Res.string.trust_pending),
+    TRUST_TRUSTED(Res.string.trust_trusted),
+    TRUST_KEY_CHANGED(Res.string.trust_key_changed),
+    DROP_FILES(Res.string.drop_files),
+    DROP_FILES_LIMIT(Res.string.drop_files_limit),
+    ENCRYPTED_CHAT(Res.string.encrypted_chat),
+    SEND_FAILED_RETRY(Res.string.send_failed_retry),
+    CANCEL_FILE_TRANSFER(Res.string.cancel_file_transfer),
+    SEND_FILE(Res.string.send_file),
+    MESSAGE_PLACEHOLDER(Res.string.message_placeholder),
+    SEND_MESSAGE(Res.string.send_message),
+    SELECT_PAIRED_DEVICE(Res.string.select_paired_device),
+    START_SECURE_CHAT(Res.string.start_secure_chat),
+    DELIVERY_PENDING(Res.string.delivery_pending),
+    DELIVERY_SENDING(Res.string.delivery_sending),
+    DELIVERY_SENT(Res.string.delivery_sent),
+    DELIVERY_UNREAD(Res.string.delivery_unread),
+    DELIVERY_READ(Res.string.delivery_read),
+    DELIVERY_FAILED(Res.string.delivery_failed),
+    FILE_PREPARING(Res.string.file_preparing),
+    FILE_WAITING_FOR_ACCEPTANCE(Res.string.file_waiting_for_acceptance),
+    FILE_TRANSFERRING(Res.string.file_transferring),
+    FILE_COMPLETED(Res.string.file_completed),
+    FILE_REJECTED(Res.string.file_rejected),
+    FILE_CANCELLED(Res.string.file_cancelled),
+    FILE_FAILED(Res.string.file_failed),
+    FILE_EXPIRED_SUMMARY(Res.string.file_expired_summary),
+    FILE_PROGRESS_SUMMARY(Res.string.file_progress_summary),
+    FILE_TERMINAL_SUMMARY(Res.string.file_terminal_summary),
+    PAIRING_TITLE(Res.string.pairing_title),
+    PAIRING_INSTRUCTION(Res.string.pairing_instruction),
+    PAIRING_WARNING(Res.string.pairing_warning),
+    PAIRING_CONFIRM(Res.string.pairing_confirm),
+    RECEIVE_FILE_TITLE(Res.string.receive_file_title),
+    RECEIVE_FILE_MESSAGE(Res.string.receive_file_message),
+    OPEN_FILE_FAILED(Res.string.open_file_failed),
+    FILE_PICKER_OPEN_FAILED(Res.string.file_picker_open_failed),
+    SELECTED_FILES_READ_FAILED(Res.string.selected_files_read_failed),
+    DIRECTORY_PICKER_OPEN_FAILED(Res.string.directory_picker_open_failed),
+    DIRECTORY_ACCESS_SAVE_FAILED(Res.string.directory_access_save_failed),
+    FILE_NONE_SELECTED(Res.string.file_none_selected),
+    FILE_BATCH_TOO_LARGE(Res.string.file_batch_too_large),
+    FILE_SIZE_UNKNOWN(Res.string.file_size_unknown),
+    FILE_TOO_LARGE(Res.string.file_too_large),
+    FILE_CHANGED(Res.string.file_changed),
+    DROPPED_FILES_READ_FAILED(Res.string.dropped_files_read_failed),
+    DROP_FILES_ONLY(Res.string.drop_files_only),
+    DROP_REGULAR_FILES_ONLY(Res.string.drop_regular_files_only),
+    LOCAL_PROFILE_NOT_READY(Res.string.local_profile_not_ready),
+    SELECT_CONTACT_FIRST(Res.string.select_contact_first),
+    PAIR_REQUEST_FAILED(Res.string.pair_request_failed),
+    PAIR_CONFIRM_FAILED(Res.string.pair_confirm_failed),
+    TRUST_ESTABLISHED(Res.string.trust_established),
+    PAIR_CANCEL_FAILED(Res.string.pair_cancel_failed),
+    MESSAGE_SEND_FAILED(Res.string.message_send_failed),
+    MESSAGE_RETRY_FAILED(Res.string.message_retry_failed),
+    DISPLAY_NAME_UPDATE_FAILED(Res.string.display_name_update_failed),
+    DISPLAY_NAME_UPDATED(Res.string.display_name_updated),
+    RUNTIME_START_FAILED(Res.string.runtime_start_failed),
+    PEERS_REFRESH_FAILED(Res.string.peers_refresh_failed),
+    PEERS_REFRESH_STARTED(Res.string.peers_refresh_started),
+    FILE_SEND_FAILED(Res.string.file_send_failed),
+    FILES_STARTED(Res.string.files_started),
+    FILES_FINISHED(Res.string.files_finished),
+    FILE_ACCEPT_FAILED(Res.string.file_accept_failed),
+    FILE_REJECT_FAILED(Res.string.file_reject_failed),
+    FILE_CANCEL_FAILED(Res.string.file_cancel_failed),
+    SAVE_DIRECTORY_UPDATE_FAILED(Res.string.save_directory_update_failed),
+    SAVE_DIRECTORY_UPDATED(Res.string.save_directory_updated),
+    RECEIVE_SETTING_UPDATE_FAILED(Res.string.receive_setting_update_failed),
+    MAX_FILE_SIZE_UPDATE_FAILED(Res.string.max_file_size_update_failed),
+    MAX_FILE_SIZE_UPDATED(Res.string.max_file_size_updated),
+    READ_RECEIPT_FAILED(Res.string.read_receipt_failed),
+}
+
+sealed interface LocalizedText {
+    data class Resource(
+        val key: AppString,
+        val formatArgs: List<Any> = emptyList(),
+        val detail: String? = null,
+    ) : LocalizedText
+
+    data class Raw(val value: String) : LocalizedText
+}
+
+@Composable
+fun appString(key: AppString, vararg formatArgs: Any): String = stringResource(key.resource, *formatArgs)
+
+@Composable
+fun LocalizedText.resolve(): String = when (this) {
+    is LocalizedText.Raw -> value
+    is LocalizedText.Resource -> {
+        val message = appString(key, *formatArgs.toTypedArray())
+        detail
+            ?.takeIf(String::isNotBlank)
+            ?.let { appString(AppString.ERROR_WITH_DETAIL, message, it) }
+            ?: message
+    }
+}

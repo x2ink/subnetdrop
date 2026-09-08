@@ -1,0 +1,2 @@
+ALTER TABLE peerEntity
+ADD COLUMN is_hidden INTEGER AS kotlin.Boolean NOT NULL DEFAULT 0;
