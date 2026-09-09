@@ -25,6 +25,11 @@ dependencyResolutionManagement {
                 includeGroupAndSubgroups("com.google")
             }
         }
+        maven("https://repo.huaweicloud.com/repository/maven") {
+            content {
+                includeGroupAndSubgroups("io.github.vinceglb")
+            }
+        }
         maven("https://maven.aliyun.com/repository/central")
         maven("https://maven.aliyun.com/repository/public")
     }

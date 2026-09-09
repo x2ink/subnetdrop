@@ -163,6 +163,14 @@ class SubnetDropTransportTest {
                 assertEquals(outgoing, alice.chatRepository.fileMessages.value.single())
                 assertEquals(incoming, bob.chatRepository.fileMessages.value.single())
                 assertEquals(conversationIdFor(alice.id, bob.id), incoming.conversationId)
+
+                alice.transport.dismissTerminalTransfers(listOf(outgoing.id))
+                bob.transport.dismissTerminalTransfers(listOf(incoming.id))
+
+                assertTrue(alice.transport.transfers.value.isEmpty())
+                assertTrue(bob.transport.transfers.value.isEmpty())
+                assertEquals(outgoing, alice.chatRepository.fileMessages.value.single())
+                assertEquals(incoming, bob.chatRepository.fileMessages.value.single())
             } finally {
                 alice.transport.stop()
                 bob.transport.stop()
@@ -669,6 +677,12 @@ private class TestChatRepository : ChatRepository {
     override suspend fun deleteMessages(conversationId: String, messageIds: List<String>) {
         messages.value = messages.value.filterNot { message ->
             message.conversationId == conversationId && message.id in messageIds
+        }
+    }
+
+    override suspend fun deleteFileMessages(conversationId: String, transferIds: List<String>) {
+        fileMessages.value = fileMessages.value.filterNot { transfer ->
+            transfer.conversationId == conversationId && transfer.id in transferIds
         }
     }
 

@@ -13,6 +13,7 @@ import ink.x2.subnetdrop.domain.port.DeviceProfileRepository
 import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PeerRepository
 import ink.x2.subnetdrop.domain.port.TrustedIdentityRepository
+import ink.x2.subnetdrop.domain.usecase.DeleteFileMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.DeleteMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ForwardMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
@@ -54,6 +55,7 @@ private val domainModule = module {
     factory { SendMessageUseCase(get(), get(), get(), get()) }
     factory { ForwardMessagesUseCase(get(), get()) }
     factory { DeleteMessagesUseCase(get()) }
+    factory { DeleteFileMessagesUseCase(get()) }
     factory { MarkConversationReadUseCase(get(), get()) }
     single {
         LocalIdentityService(
@@ -84,6 +86,7 @@ private val presentationModule = module {
             sendMessage = get(),
             forwardMessages = get(),
             deleteMessages = get(),
+            deleteFileMessages = get(),
             markConversationRead = get(),
             pairingService = get(),
             fileTransferService = get(),

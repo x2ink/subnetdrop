@@ -27,6 +27,8 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [产品与通信协议 v1](spec/subnetdrop-v1.md)
 - [高速文件传输 v1](spec/file-transfer-v1.md)
 - [文件消息持久化 v1](spec/persisted-file-messages-v1.md)
+- [图片与视频消息预览 v1](spec/media-message-preview-v1.md)
+- [文字与文件消息操作 v1](spec/message-actions-v1.md)
 - [多文件并行传输 v1](spec/parallel-file-transfer-v1.md)
 - [聊天时间线与输入布局 v1](spec/chat-timeline-ui-v1.md)
 - [中英日三语与应用内语言切换 v1](spec/localization-v1.md)
@@ -60,6 +62,8 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [暂存区自动提交 Skill 验证](tasks/verification/2026-09-05-staged-auto-commit-skill.md)
 - [GitHub Actions 测试安装包验证](tasks/verification/2026-09-04-github-actions-test-packages.md)
 - [GitHub Actions 桌面测试包修复](tasks/verification/2026-09-07-github-actions-desktop-packages.md)
+- [图片与视频消息预览验证](tasks/verification/2026-09-09-media-message-preview.md)
+- [文字与文件消息操作验证](tasks/verification/2026-09-09-message-file-actions.md)
 
 ## 系统上下文
 
@@ -100,7 +104,7 @@ flowchart LR
 | `:core` | 实体、端口、用例和平台无关规则 | Kotlin、Coroutines Flow |
 | `:data` | SQLDelight schema 与仓库适配 | `:core`、SQLDelight |
 | `:network` | 发现、身份、配对、协议、密码学和传输 | `:core`、Ktor、Tink、平台 API |
-| `:app:shared` | Compose UI、ViewModel、导航、文件选择和运行时编排 | `:core`、`:data`、`:network`、Koin |
+| `:app:shared` | Compose UI、ViewModel、导航、文件选择、媒体预览和运行时编排 | `:core`、`:data`、`:network`、Koin、Coil、FileKit |
 | `:app:androidApp` | Android 入口、权限与生命周期 | `:app:shared` |
 | `:app:desktopApp` | macOS/Windows 入口、窗口与分发 | `:app:shared` |
 
@@ -167,9 +171,14 @@ interface TrustedIdentityRepository
 协议或实现替换应优先保持端口语义稳定。若必须修改数据库字段、帧类型或加密关联数据，先更新 `docs/spec/`，
 明确兼容策略与迁移，再修改实现。
 
-聊天文字消息的复制、部分选中、本地删除、跨设备转发和多选状态语义见
-[文字消息操作 v1](spec/message-actions-v1.md)。这些瞬时交互状态由共享 Compose UI 持有，删除与转发分别通过
-领域用例进入 `ChatRepository` 和 `ChatTransport`，Composable 不直接访问数据库或网络。
+聊天文字与文件消息的复制、本地删除、跨设备转发和混合多选状态语义见
+[文字与文件消息操作 v1](spec/message-actions-v1.md)。这些瞬时交互状态由共享 Compose UI 持有；文字删除与转发
+通过领域用例进入 SQLDelight 和加密发送链路，文件删除同步更新持久化与终态传输状态，文件转发重新进入正式文件
+传输服务。Composable 不直接执行数据库或网络 IO。
+
+图片和视频文件消息的分类、4:3 图片缩略图、16:9 视频首帧、完成预览和平台解码边界见
+[图片与视频消息预览 v1](spec/media-message-preview-v1.md)。共享图片加载器由 Coil 与 FileKit 组成；Android 视频
+首帧使用系统媒体解码能力，桌面首帧由 JVM 平台适配器调用 JCodec，解码失败只影响缩略图，不改变文件终态或打开入口。
 
 ## 数据与安全边界
 

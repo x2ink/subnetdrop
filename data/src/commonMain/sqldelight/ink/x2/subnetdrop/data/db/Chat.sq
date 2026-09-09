@@ -179,6 +179,10 @@ deleteMessages:
 DELETE FROM messageEntity
 WHERE conversation_id = ? AND id IN ?;
 
+deleteFileMessages:
+DELETE FROM fileMessageEntity
+WHERE conversation_id = ? AND id IN ?;
+
 selectUnreadIncomingMessageIds:
 SELECT id
 FROM messageEntity

@@ -392,6 +392,16 @@ class SubnetDropTransport(
         }
     }
 
+    override suspend fun dismissTerminalTransfers(transferIds: List<String>) {
+        val distinctIds = transferIds.toSet()
+        if (distinctIds.isEmpty()) return
+        transferMutex.withLock {
+            val matchedTransfers = mutableTransfers.value.filter { it.id in distinctIds }
+            require(matchedTransfers.none { it.status.isActive() }) { "Active transfers cannot be dismissed" }
+            mutableTransfers.value = mutableTransfers.value.filterNot { it.id in distinctIds }
+        }
+    }
+
     override suspend fun requestPairing(peerId: String) {
         val localIdentity = localIdentityService.get()
         val response = exchange(

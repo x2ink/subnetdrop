@@ -3,6 +3,7 @@ package ink.x2.subnetdrop.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ink.x2.subnetdrop.domain.model.AppLanguage
+import ink.x2.subnetdrop.domain.model.FileTransfer
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
@@ -15,6 +16,7 @@ import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PairingCandidate
 import ink.x2.subnetdrop.domain.port.PairingService
+import ink.x2.subnetdrop.domain.usecase.DeleteFileMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.DeleteMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ForwardMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
@@ -48,6 +50,7 @@ class SubnetDropViewModel(
     private val sendMessage: SendMessageUseCase,
     private val forwardMessages: ForwardMessagesUseCase,
     private val deleteMessages: DeleteMessagesUseCase,
+    private val deleteFileMessages: DeleteFileMessagesUseCase,
     private val markConversationRead: MarkConversationReadUseCase,
     private val pairingService: PairingService,
     private val fileTransferService: FileTransferService,
@@ -133,32 +136,42 @@ class SubnetDropViewModel(
         sendMessage.retry(message).getOrThrow()
     }
 
-    fun forward(messages: List<Message>, targetPeer: Peer) {
-        if (messages.isEmpty()) return
+    fun forward(messages: List<Message>, files: List<LocalFile>, targetPeer: Peer) {
+        if (messages.isEmpty() && files.isEmpty()) return
         if (targetPeer.availability != PeerAvailability.ONLINE || targetPeer.trustState != TrustState.TRUSTED) {
             return showError(AppString.FORWARD_TARGET_UNAVAILABLE)
         }
         val senderId = localProfile.value?.deviceId ?: return showError(AppString.LOCAL_PROFILE_NOT_READY)
         launchAction(AppString.MESSAGE_FORWARD_FAILED) {
-            forwardMessages(
-                messages = messages,
-                targetConversationId = conversationIdFor(senderId, targetPeer.id),
-                senderId = senderId,
-                recipientId = targetPeer.id,
-            ).getOrThrow()
-            showMessage(AppString.MESSAGES_FORWARDED, messages.size)
+            if (messages.isNotEmpty()) {
+                forwardMessages(
+                    messages = messages,
+                    targetConversationId = conversationIdFor(senderId, targetPeer.id),
+                    senderId = senderId,
+                    recipientId = targetPeer.id,
+                ).getOrThrow()
+            }
+            files.chunked(FileTransferService.MAX_FILES_PER_BATCH).forEach { batch ->
+                fileTransferService.sendFiles(targetPeer.id, batch)
+            }
+            showMessage(AppString.MESSAGES_FORWARDED, messages.size + files.size)
         }
     }
 
-    fun delete(messages: List<Message>) {
+    fun delete(messages: List<Message>, files: List<FileTransfer>) {
         val selected = selection.value ?: return
         val messageIds = messages
             .filter { it.conversationId == selected.conversationId }
             .map(Message::id)
-        if (messageIds.isEmpty()) return
+        val fileIds = files
+            .filter { it.conversationId == selected.conversationId }
+            .map(FileTransfer::id)
+        if (messageIds.isEmpty() && fileIds.isEmpty()) return
         launchAction(AppString.MESSAGE_DELETE_FAILED) {
             deleteMessages(selected.conversationId, messageIds).getOrThrow()
-            showMessage(AppString.MESSAGES_DELETED, messageIds.size)
+            deleteFileMessages(selected.conversationId, fileIds).getOrThrow()
+            fileTransferService.dismissTerminalTransfers(fileIds)
+            showMessage(AppString.MESSAGES_DELETED, messageIds.size + fileIds.size)
         }
     }
 

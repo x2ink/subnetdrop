@@ -69,6 +69,17 @@ class MessageActionsUseCaseTest {
         assertEquals(listOf("older", "newer"), repository.saved.map(Message::body))
     }
 
+    @Test
+    fun deletesDistinctFileMessagesWithinConversation() = runTest {
+        val repository = ActionChatRepository()
+
+        val result = DeleteFileMessagesUseCase(repository)("local:source", listOf("file-1", "file-1", "file-2"))
+
+        assertTrue(result.isSuccess)
+        assertEquals("local:source", repository.deletedFileConversationId)
+        assertEquals(listOf("file-1", "file-2"), repository.deletedFileIds)
+    }
+
     private fun message(body: String, createdAt: Long) = Message(
         id = body,
         conversationId = "local:source",
@@ -83,6 +94,8 @@ class MessageActionsUseCaseTest {
 
 private class ActionChatRepository : ChatRepository {
     val saved = mutableListOf<Message>()
+    var deletedFileConversationId: String? = null
+    var deletedFileIds = emptyList<String>()
 
     override fun observeConversations(): Flow<List<Conversation>> = flowOf(emptyList())
     override fun observeMessages(conversationId: String): Flow<List<Message>> = flowOf(saved)
@@ -95,6 +108,10 @@ private class ActionChatRepository : ChatRepository {
     override suspend fun saveFileMessage(transfer: FileTransfer) = Unit
     override suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus) = Unit
     override suspend fun deleteMessages(conversationId: String, messageIds: List<String>) = Unit
+    override suspend fun deleteFileMessages(conversationId: String, transferIds: List<String>) {
+        deletedFileConversationId = conversationId
+        deletedFileIds = transferIds
+    }
     override suspend fun unreadIncomingMessageIds(conversationId: String): List<String> = emptyList()
     override suspend fun markConversationRead(conversationId: String) = Unit
     override suspend fun markOutgoingMessagesRead(peerId: String, messageIds: List<String>) = Unit

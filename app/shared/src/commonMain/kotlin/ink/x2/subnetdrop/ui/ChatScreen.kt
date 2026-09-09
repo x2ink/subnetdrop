@@ -103,8 +103,8 @@ fun ChatScreen(
     onCancelFile: (String) -> Unit,
     onFilePickerError: (String) -> Unit,
     peers: List<Peer>,
-    onForwardMessages: (List<Message>, Peer) -> Unit,
-    onDeleteMessages: (List<Message>) -> Unit,
+    onForwardItems: (List<Message>, List<LocalFile>, Peer) -> Unit,
+    onDeleteItems: (List<Message>, List<FileTransfer>) -> Unit,
 ) {
     if (selection == null) {
         EmptyChat(modifier)
@@ -117,18 +117,37 @@ fun ChatScreen(
     val clipboard = LocalClipboard.current
     var isFileDragActive by remember { mutableStateOf(false) }
     var actionMessageId by remember(selection.conversationId) { mutableStateOf<String?>(null) }
+    var actionFileId by remember(selection.conversationId) { mutableStateOf<String?>(null) }
     var partialSelectionMessageId by remember(selection.conversationId) { mutableStateOf<String?>(null) }
     var multiSelectActive by remember(selection.conversationId) { mutableStateOf(false) }
     var selectedMessageIds by remember(selection.conversationId) { mutableStateOf(emptySet<String>()) }
+    var selectedFileIds by remember(selection.conversationId) { mutableStateOf(emptySet<String>()) }
     var forwardQueue by remember(selection.conversationId) { mutableStateOf(emptyList<Message>()) }
+    var forwardFileQueue by remember(selection.conversationId) { mutableStateOf(emptyList<FileTransfer>()) }
     var deleteQueue by remember(selection.conversationId) { mutableStateOf(emptyList<Message>()) }
+    var deleteFileQueue by remember(selection.conversationId) { mutableStateOf(emptyList<FileTransfer>()) }
     val selectedMessages = remember(messages, selectedMessageIds) {
         messages.filter { it.id in selectedMessageIds }
     }
-    LaunchedEffect(messages) {
+    val currentFileMessages = remember(storedFileMessages, transfers, selection.conversationId, selection.peerId) {
+        buildChatTimeline(
+            messages = emptyList(),
+            storedFileMessages = storedFileMessages,
+            transfers = transfers,
+            conversationId = selection.conversationId,
+            peerId = selection.peerId,
+        ).filterIsInstance<ChatTimelineItem.FileMessage>().map(ChatTimelineItem.FileMessage::transfer)
+    }
+    val selectedFiles = remember(currentFileMessages, selectedFileIds) {
+        currentFileMessages.filter { it.id in selectedFileIds }
+    }
+    LaunchedEffect(messages, currentFileMessages) {
         val availableIds = messages.mapTo(mutableSetOf(), Message::id)
         selectedMessageIds = selectedMessageIds.intersect(availableIds)
+        val availableFileIds = currentFileMessages.mapTo(mutableSetOf(), FileTransfer::id)
+        selectedFileIds = selectedFileIds.intersect(availableFileIds)
         if (actionMessageId !in availableIds) actionMessageId = null
+        if (actionFileId !in availableFileIds) actionFileId = null
         if (partialSelectionMessageId !in availableIds) partialSelectionMessageId = null
     }
     val openFileFailed = appString(AppString.OPEN_FILE_FAILED)
@@ -155,9 +174,10 @@ fun ChatScreen(
     ) {
         Column(Modifier.fillMaxSize().imePadding()) {
             when {
-                multiSelectActive -> MessageModeHeader(selectedMessages.size) {
+                multiSelectActive -> MessageModeHeader(selectedMessages.size + selectedFiles.size) {
                     multiSelectActive = false
                     selectedMessageIds = emptySet()
+                    selectedFileIds = emptySet()
                 }
                 partialSelectionMessageId != null -> MessageModeHeader(selectedCount = null) {
                     partialSelectionMessageId = null
@@ -177,9 +197,11 @@ fun ChatScreen(
                 onOpenFile = openFile,
                 interactionState = MessageInteractionState(
                     actionMessageId = actionMessageId,
+                    actionFileId = actionFileId,
                     partialSelectionMessageId = partialSelectionMessageId,
                     multiSelectActive = multiSelectActive,
                     selectedMessageIds = selectedMessageIds,
+                    selectedFileIds = selectedFileIds,
                 ),
                 onActionMenuRequest = { actionMessageId = it.id },
                 onActionMenuDismiss = { actionMessageId = null },
@@ -201,12 +223,40 @@ fun ChatScreen(
                 onMessageSelectionToggle = { messageId ->
                     selectedMessageIds = selectedMessageIds.toggle(messageId)
                 },
+                onFileActionMenuRequest = { actionFileId = it.id },
+                onFileActionMenuDismiss = { actionFileId = null },
+                onFileAction = { transfer, action ->
+                    actionFileId = null
+                    when (action) {
+                        MessageAction.COPY -> coroutineScope.launch {
+                            clipboard.setClipEntry(plainTextClipEntry(transfer.fileName))
+                        }
+                        MessageAction.FORWARD -> forwardFileQueue = listOf(transfer)
+                        MessageAction.DELETE -> deleteFileQueue = listOf(transfer)
+                        MessageAction.MULTI_SELECT -> {
+                            multiSelectActive = true
+                            selectedFileIds = setOf(transfer.id)
+                        }
+                        MessageAction.PARTIAL_SELECT -> Unit
+                    }
+                },
+                onFileSelectionToggle = { transferId ->
+                    selectedFileIds = selectedFileIds.toggle(transferId)
+                },
             )
             when {
                 multiSelectActive -> MultiSelectActionBar(
-                    selectedCount = selectedMessages.size,
-                    onForward = { forwardQueue = selectedMessages },
-                    onDelete = { deleteQueue = selectedMessages },
+                    selectedCount = selectedMessages.size + selectedFiles.size,
+                    forwardEnabled = selectedFiles.all(FileTransfer::isForwardable),
+                    deleteEnabled = true,
+                    onForward = {
+                        forwardQueue = selectedMessages
+                        forwardFileQueue = selectedFiles
+                    },
+                    onDelete = {
+                        deleteQueue = selectedMessages
+                        deleteFileQueue = selectedFiles
+                    },
                 )
                 partialSelectionMessageId == null -> Composer(
                     onSend = onSend,
@@ -223,30 +273,51 @@ fun ChatScreen(
         }
         if (isFileDragActive) FileDropOverlay()
     }
-    if (forwardQueue.isNotEmpty()) {
-        ForwardMessagesDialog(
-            messageCount = forwardQueue.size,
+    if (forwardQueue.isNotEmpty() || forwardFileQueue.isNotEmpty()) {
+        ForwardMessagesSheet(
+            messageCount = forwardQueue.size + forwardFileQueue.size,
             peers = peers,
-            onDismiss = { forwardQueue = emptyList() },
+            onDismiss = {
+                forwardQueue = emptyList()
+                forwardFileQueue = emptyList()
+            },
             onPeerSelected = { peer ->
                 val messagesToForward = forwardQueue
+                val filesToForward = forwardFileQueue
                 forwardQueue = emptyList()
-                multiSelectActive = false
-                selectedMessageIds = emptySet()
-                onForwardMessages(messagesToForward, peer)
+                forwardFileQueue = emptyList()
+                coroutineScope.launch {
+                    try {
+                        val localFiles = filesToForward.toForwardFiles(maxFileSizeBytes)
+                        multiSelectActive = false
+                        selectedMessageIds = emptySet()
+                        selectedFileIds = emptySet()
+                        onForwardItems(messagesToForward, localFiles, peer)
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        onFilePickerError(inputMessages.forException(exception, inputMessages.selectedFilesReadFailed))
+                    }
+                }
             },
         )
     }
-    if (deleteQueue.isNotEmpty()) {
+    if (deleteQueue.isNotEmpty() || deleteFileQueue.isNotEmpty()) {
         DeleteMessagesDialog(
-            messageCount = deleteQueue.size,
-            onDismiss = { deleteQueue = emptyList() },
+            messageCount = deleteQueue.size + deleteFileQueue.size,
+            onDismiss = {
+                deleteQueue = emptyList()
+                deleteFileQueue = emptyList()
+            },
             onConfirm = {
                 val messagesToDelete = deleteQueue
+                val filesToDelete = deleteFileQueue
                 deleteQueue = emptyList()
+                deleteFileQueue = emptyList()
                 multiSelectActive = false
                 selectedMessageIds = emptySet()
-                onDeleteMessages(messagesToDelete)
+                selectedFileIds = emptySet()
+                onDeleteItems(messagesToDelete, filesToDelete)
             },
         )
     }
@@ -371,6 +442,10 @@ private fun ChatTimeline(
     onActionMenuDismiss: () -> Unit,
     onMessageAction: (Message, MessageAction) -> Unit,
     onMessageSelectionToggle: (String) -> Unit,
+    onFileActionMenuRequest: (FileTransfer) -> Unit,
+    onFileActionMenuDismiss: () -> Unit,
+    onFileAction: (FileTransfer, MessageAction) -> Unit,
+    onFileSelectionToggle: (String) -> Unit,
 ) {
     val timelineItems = remember(messages, storedFileMessages, transfers, conversationId, peerId) {
         buildChatTimeline(messages, storedFileMessages, transfers, conversationId, peerId)
@@ -397,9 +472,62 @@ private fun ChatTimeline(
                     onMessageAction = onMessageAction,
                     onMessageSelectionToggle = onMessageSelectionToggle,
                 )
-                is ChatTimelineItem.FileMessage -> FileTransferMessage(item.transfer, onCancelFile, onOpenFile)
+                is ChatTimelineItem.FileMessage -> TimelineFileMessage(
+                    transfer = item.transfer,
+                    interactionState = interactionState,
+                    onCancelFile = onCancelFile,
+                    onOpenFile = onOpenFile,
+                    onActionMenuRequest = onFileActionMenuRequest,
+                    onActionMenuDismiss = onFileActionMenuDismiss,
+                    onFileAction = onFileAction,
+                    onFileSelectionToggle = onFileSelectionToggle,
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun TimelineFileMessage(
+    transfer: FileTransfer,
+    interactionState: MessageInteractionState,
+    onCancelFile: (String) -> Unit,
+    onOpenFile: (FileTransfer) -> Unit,
+    onActionMenuRequest: (FileTransfer) -> Unit,
+    onActionMenuDismiss: () -> Unit,
+    onFileAction: (FileTransfer, MessageAction) -> Unit,
+    onFileSelectionToggle: (String) -> Unit,
+) {
+    if (interactionState.multiSelectActive && transfer.isTerminal()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MessageSelectionIndicator(
+                selected = transfer.id in interactionState.selectedFileIds,
+                onClick = { onFileSelectionToggle(transfer.id) },
+            )
+            Box(
+                modifier = Modifier.weight(1f).clickable { onFileSelectionToggle(transfer.id) },
+            ) {
+                FileTransferMessage(
+                    transfer = transfer,
+                    interactionState = interactionState,
+                    onCancelFile = onCancelFile,
+                    onOpenFile = onOpenFile,
+                    onActionMenuRequest = onActionMenuRequest,
+                    onActionMenuDismiss = onActionMenuDismiss,
+                    onFileAction = onFileAction,
+                )
+            }
+        }
+    } else {
+        FileTransferMessage(
+            transfer = transfer,
+            interactionState = interactionState,
+            onCancelFile = onCancelFile,
+            onOpenFile = onOpenFile,
+            onActionMenuRequest = onActionMenuRequest,
+            onActionMenuDismiss = onActionMenuDismiss,
+            onFileAction = onFileAction,
+        )
     }
 }
 
@@ -539,11 +667,13 @@ private fun MessageBody(message: Message, outgoing: Boolean, textSelectionEnable
 private fun Modifier.messageInteraction(
     enabled: Boolean,
     longClickLabel: String,
+    onClick: () -> Unit = {},
     onActionMenuRequest: () -> Unit,
 ): Modifier = if (enabled) {
     platformSecondaryClick(onActionMenuRequest)
         .combinedClickable(
-            onClick = {},
+            onClick = onClick,
+            onDoubleClick = onActionMenuRequest,
             onLongClickLabel = longClickLabel,
             onLongClick = onActionMenuRequest,
         )
@@ -590,8 +720,12 @@ private fun DeliveryState(
 @Composable
 private fun FileTransferMessage(
     transfer: FileTransfer,
+    interactionState: MessageInteractionState,
     onCancelFile: (String) -> Unit,
     onOpenFile: (FileTransfer) -> Unit,
+    onActionMenuRequest: (FileTransfer) -> Unit,
+    onActionMenuDismiss: () -> Unit,
+    onFileAction: (FileTransfer, MessageAction) -> Unit,
 ) {
     val outgoing = transfer.direction == FileTransferDirection.OUTGOING
     val coroutineScope = rememberCoroutineScope()
@@ -616,6 +750,63 @@ private fun FileTransferMessage(
         }
         Unit
     }
+    val mediaKind = transfer.mediaMessageKind()
+    val terminal = transfer.isTerminal()
+    val forwardable = transfer.isForwardable() && localFileExists == true
+    val enabledActions = buildSet {
+        add(MessageAction.COPY)
+        if (forwardable) add(MessageAction.FORWARD)
+        if (terminal) {
+            add(MessageAction.DELETE)
+            add(MessageAction.MULTI_SELECT)
+        }
+    }
+    val interactionModifier = Modifier.messageInteraction(
+        enabled = interactionState.partialSelectionMessageId == null && !interactionState.multiSelectActive,
+        longClickLabel = appString(AppString.MESSAGE_ACTIONS),
+        onClick = { if (canOpen) openFile() },
+        onActionMenuRequest = { onActionMenuRequest(transfer) },
+    )
+    Box(Modifier.fillMaxWidth()) {
+        if (mediaKind != MediaMessageKind.FILE) {
+            MediaTransferMessage(
+                transfer = transfer,
+                kind = mediaKind,
+                outgoing = outgoing,
+                expired = expired,
+                canOpen = transfer.status == FileTransferStatus.COMPLETED && localFileExists == true,
+                interactionModifier = interactionModifier,
+                onCancel = { onCancelFile(transfer.id) },
+            )
+        } else {
+            StandardFileTransferMessage(
+                transfer = transfer,
+                outgoing = outgoing,
+                cancellable = cancellable,
+                expired = expired,
+                interactionModifier = interactionModifier,
+                onCancelFile = onCancelFile,
+            )
+        }
+        MessageActionMenu(
+            expanded = interactionState.actionFileId == transfer.id,
+            actions = FILE_MESSAGE_ACTIONS,
+            enabledActions = enabledActions,
+            onDismiss = onActionMenuDismiss,
+            onAction = { action -> onFileAction(transfer, action) },
+        )
+    }
+}
+
+@Composable
+private fun StandardFileTransferMessage(
+    transfer: FileTransfer,
+    outgoing: Boolean,
+    cancellable: Boolean,
+    expired: Boolean,
+    interactionModifier: Modifier,
+    onCancelFile: (String) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
@@ -623,7 +814,7 @@ private fun FileTransferMessage(
         Surface(
             modifier = Modifier
                 .widthIn(max = MAX_FILE_MESSAGE_WIDTH)
-                .then(if (canOpen) Modifier.clickable(onClick = openFile) else Modifier),
+                .then(interactionModifier),
             shape = MessageBubbleShape(pointingLeft = !outgoing),
             color = if (outgoing) {
                 MaterialTheme.colorScheme.primaryContainer
@@ -804,7 +995,7 @@ private fun DeliveryStatus.label(): String = when (this) {
 }
 
 @Composable
-private fun FileTransferStatus.label(): String = when (this) {
+internal fun FileTransferStatus.label(): String = when (this) {
     FileTransferStatus.PREPARING -> appString(AppString.FILE_PREPARING)
     FileTransferStatus.WAITING_FOR_ACCEPTANCE -> appString(AppString.FILE_WAITING_FOR_ACCEPTANCE)
     FileTransferStatus.TRANSFERRING -> appString(AppString.FILE_TRANSFERRING)
@@ -815,7 +1006,7 @@ private fun FileTransferStatus.label(): String = when (this) {
 }
 
 @Composable
-private fun FileTransfer.summary(expired: Boolean): String = if (expired) {
+internal fun FileTransfer.summary(expired: Boolean): String = if (expired) {
     appString(AppString.FILE_EXPIRED_SUMMARY, formatFileSize(size))
 } else {
     when (status) {
@@ -838,6 +1029,20 @@ private fun FileTransfer.summary(expired: Boolean): String = if (expired) {
 
 internal fun isFileMessageExpired(transfer: FileTransfer, localFileExists: Boolean?): Boolean =
     transfer.status == FileTransferStatus.COMPLETED && localFileExists == false
+
+internal fun FileTransfer.isTerminal(): Boolean = when (status) {
+    FileTransferStatus.PREPARING,
+    FileTransferStatus.WAITING_FOR_ACCEPTANCE,
+    FileTransferStatus.TRANSFERRING,
+    -> false
+    FileTransferStatus.COMPLETED,
+    FileTransferStatus.REJECTED,
+    FileTransferStatus.CANCELLED,
+    FileTransferStatus.FAILED,
+    -> true
+}
+
+internal fun FileTransfer.isForwardable(): Boolean = status == FileTransferStatus.COMPLETED && localPath != null
 
 private suspend fun doesLocalFileExist(path: String): Boolean = withContext(Dispatchers.IO) {
     try {
@@ -866,9 +1071,11 @@ internal sealed interface ChatTimelineItem {
 
 private data class MessageInteractionState(
     val actionMessageId: String?,
+    val actionFileId: String?,
     val partialSelectionMessageId: String?,
     val multiSelectActive: Boolean,
     val selectedMessageIds: Set<String>,
+    val selectedFileIds: Set<String>,
 )
 
 internal fun Set<String>.toggle(value: String): Set<String> = if (value in this) this - value else this + value
@@ -1028,6 +1235,12 @@ class MessageBubbleShape(
 private val MAX_BUBBLE_WIDTH = 560.dp
 private val MAX_FILE_MESSAGE_WIDTH = 440.dp
 private val MAX_FILE_CONTENT_WIDTH = 320.dp
+private val FILE_MESSAGE_ACTIONS = listOf(
+    MessageAction.COPY,
+    MessageAction.FORWARD,
+    MessageAction.DELETE,
+    MessageAction.MULTI_SELECT,
+)
 private val MIN_BUBBLE_WIDTH = 64.dp
 private val MIN_BUBBLE_HEIGHT = 48.dp
 private val BUBBLE_HORIZONTAL_PADDING = 14.dp

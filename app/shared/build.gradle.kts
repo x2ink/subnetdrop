@@ -36,7 +36,11 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
+            implementation(libs.coil.video)
             implementation(libs.koin.android)
+        }
+        jvmMain.dependencies {
+            implementation(libs.jcodec.javase)
         }
         commonMain.dependencies {
             api(project(":core"))
@@ -58,6 +62,8 @@ kotlin {
             implementation(libs.filekit.core)
             implementation(libs.filekit.dialogs)
             implementation(libs.filekit.dialogs.compose)
+            implementation(libs.filekit.coil)
+            implementation(libs.coil.compose)
             implementation(libs.navigation3.ui)
         }
         commonTest.dependencies {

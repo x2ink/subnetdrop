@@ -96,6 +96,8 @@ private class RecordingChatRepository : ChatRepository {
         saved.removeAll { it.conversationId == conversationId && it.id in messageIds }
     }
 
+    override suspend fun deleteFileMessages(conversationId: String, transferIds: List<String>) = Unit
+
     override suspend fun unreadIncomingMessageIds(conversationId: String): List<String> = emptyList()
 
     override suspend fun markConversationRead(conversationId: String) = Unit

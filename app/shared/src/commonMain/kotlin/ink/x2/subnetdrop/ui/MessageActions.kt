@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -24,9 +23,11 @@ import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,6 +56,8 @@ internal enum class MessageAction {
 @Composable
 internal fun MessageActionMenu(
     expanded: Boolean,
+    actions: List<MessageAction> = MessageAction.entries,
+    enabledActions: Set<MessageAction> = actions.toSet(),
     onDismiss: () -> Unit,
     onAction: (MessageAction) -> Unit,
 ) {
@@ -70,20 +73,30 @@ internal fun MessageActionMenu(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            MessageAction.entries.forEach { action ->
-                MessageActionButton(action) { onAction(action) }
+            actions.forEach { action ->
+                MessageActionButton(
+                    action = action,
+                    enabled = action in enabledActions,
+                    onClick = { onAction(action) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun MessageActionButton(action: MessageAction, onClick: () -> Unit) {
+private fun MessageActionButton(action: MessageAction, enabled: Boolean, onClick: () -> Unit) {
     val presentation = action.presentation()
+    val destructive = action == MessageAction.DELETE
+    val actionColor = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        destructive -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurface
+    }
     Column(
         modifier = Modifier
             .width(55.dp)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -91,21 +104,13 @@ private fun MessageActionButton(action: MessageAction, onClick: () -> Unit) {
             imageVector = presentation.icon,
             contentDescription = presentation.label,
             modifier = Modifier.size(24.dp),
-            tint = if (action == MessageAction.DELETE) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
+            tint = actionColor,
         )
         Text(
             text = presentation.label,
             modifier = Modifier.padding(top = 6.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = if (action == MessageAction.DELETE) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = actionColor,
             maxLines = 2,
             textAlign = TextAlign.Center,
         )
@@ -176,6 +181,8 @@ internal fun MessageSelectionIndicator(selected: Boolean, onClick: () -> Unit) {
 @Composable
 internal fun MultiSelectActionBar(
     selectedCount: Int,
+    forwardEnabled: Boolean,
+    deleteEnabled: Boolean,
     onForward: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -188,13 +195,13 @@ internal fun MultiSelectActionBar(
             BottomAction(
                 icon = Icons.AutoMirrored.Filled.ArrowForward,
                 label = appString(AppString.MESSAGE_ACTION_FORWARD),
-                enabled = selectedCount > 0,
+                enabled = selectedCount > 0 && forwardEnabled,
                 onClick = onForward,
             )
             BottomAction(
                 icon = Icons.Outlined.DeleteOutline,
                 label = appString(AppString.MESSAGE_ACTION_DELETE),
-                enabled = selectedCount > 0,
+                enabled = selectedCount > 0 && deleteEnabled,
                 destructive = true,
                 onClick = onDelete,
             )
@@ -232,57 +239,56 @@ private fun BottomAction(
 }
 
 @Composable
-internal fun ForwardMessagesDialog(
+@OptIn(ExperimentalMaterial3Api::class)
+internal fun ForwardMessagesSheet(
     messageCount: Int,
     peers: List<Peer>,
     onDismiss: () -> Unit,
     onPeerSelected: (Peer) -> Unit,
 ) {
     val targets = eligibleForwardTargets(peers)
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(appString(AppString.FORWARD_MESSAGES_TITLE, messageCount)) },
-        text = {
+    ) {
+        Text(
+            text = appString(AppString.FORWARD_MESSAGES_TITLE, messageCount),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Box(Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 480.dp)) {
             if (targets.isEmpty()) {
-                Text(appString(AppString.NO_ONLINE_DEVICES), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = appString(AppString.NO_ONLINE_DEVICES),
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             } else {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     items(targets, key = Peer::id) { peer ->
-                        Row(
+                        PeerListItem(
+                            peer = peer,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onPeerSelected(peer) }
-                                .padding(horizontal = 4.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(40.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(peer.displayName.firstOrNull()?.uppercase() ?: "?")
-                                }
-                            }
-                            Text(
-                                text = peer.displayName,
-                                modifier = Modifier.padding(start = 12.dp).weight(1f),
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = appString(AppString.MESSAGE_ACTION_FORWARD),
-                            )
-                        }
+                                .padding(horizontal = 16.dp),
+                            trailingIcon = Icons.AutoMirrored.Filled.ArrowForward,
+                            trailingContentDescription = appString(AppString.MESSAGE_ACTION_FORWARD),
+                        )
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(appString(AppString.ACTION_CANCEL)) }
-        },
-    )
+        }
+        TextButton(
+            onClick = onDismiss,
+            modifier = Modifier.align(Alignment.End).padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Text(appString(AppString.ACTION_CANCEL))
+        }
+    }
 }
 
 @Composable

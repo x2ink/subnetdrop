@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.ui.NavDisplay
+import coil3.compose.setSingletonImageLoaderFactory
 import ink.x2.subnetdrop.domain.model.AppLanguage
 import ink.x2.subnetdrop.presentation.ChatSelection
 import ink.x2.subnetdrop.presentation.SubnetDropViewModel
@@ -40,10 +41,12 @@ import ink.x2.subnetdrop.ui.ChatScreen
 import ink.x2.subnetdrop.ui.HomeScreen
 import ink.x2.subnetdrop.ui.IncomingFileDialog
 import ink.x2.subnetdrop.ui.PairingDialog
+import ink.x2.subnetdrop.ui.createMediaImageLoader
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun App(viewModel: SubnetDropViewModel = koinViewModel()) {
+    setSingletonImageLoaderFactory(::createMediaImageLoader)
     val ui = rememberAppUiState(viewModel)
     AppLanguageEffect(ui.appLanguage) {
         AppContent(ui, viewModel)
@@ -151,8 +154,8 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onCancelFile = viewModel::cancelFile,
             onFilePickerError = viewModel::reportFilePickerError,
             peers = ui.peers,
-            onForwardMessages = viewModel::forward,
-            onDeleteMessages = viewModel::delete,
+            onForwardItems = viewModel::forward,
+            onDeleteItems = viewModel::delete,
         )
     }
 }
@@ -205,8 +208,8 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onCancelFile = viewModel::cancelFile,
                         onFilePickerError = viewModel::reportFilePickerError,
                         peers = latestUi.value.peers,
-                        onForwardMessages = viewModel::forward,
-                        onDeleteMessages = viewModel::delete,
+                        onForwardItems = viewModel::forward,
+                        onDeleteItems = viewModel::delete,
                     )
                 }
                 else -> error("Unknown navigation route: $route")

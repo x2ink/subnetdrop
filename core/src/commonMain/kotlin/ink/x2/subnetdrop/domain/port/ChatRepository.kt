@@ -21,6 +21,8 @@ interface ChatRepository {
 
     suspend fun deleteMessages(conversationId: String, messageIds: List<String>)
 
+    suspend fun deleteFileMessages(conversationId: String, transferIds: List<String>)
+
     suspend fun unreadIncomingMessageIds(conversationId: String): List<String>
 
     suspend fun markConversationRead(conversationId: String)

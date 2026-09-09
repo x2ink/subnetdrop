@@ -282,7 +282,8 @@ private fun PeerRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
-        Card(
+        PeerListItem(
+            peer = peer,
             modifier = Modifier
                 .fillMaxWidth()
                 .platformSecondaryClick { menuExpanded = true }
@@ -291,29 +292,9 @@ private fun PeerRow(
                     onLongClickLabel = appString(AppString.DELETE_DEVICE),
                     onLongClick = { menuExpanded = true },
                 ),
-        ) {
-            Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                PeerAvatar(peer.displayName, peer.availability == PeerAvailability.ONLINE)
-                Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                    Text(peer.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(
-                        text = peer.trustState.label(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (peer.trustState == TrustState.KEY_CHANGED) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Icon(
-                    Icons.Outlined.ChevronRight,
-                    contentDescription = appString(AppString.ACTION_OPEN),
-                )
-            }
-        }
+            trailingIcon = Icons.Outlined.ChevronRight,
+            trailingContentDescription = appString(AppString.ACTION_OPEN),
+        )
         PeerActionMenu(
             peer = peer,
             expanded = menuExpanded,
@@ -323,6 +304,35 @@ private fun PeerRow(
                 onDeleteRequested()
             },
         )
+    }
+}
+
+@Composable
+internal fun PeerListItem(
+    peer: Peer,
+    modifier: Modifier,
+    trailingIcon: ImageVector,
+    trailingContentDescription: String,
+) {
+    Card(modifier = modifier) {
+        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            PeerAvatar(peer.displayName, peer.availability == PeerAvailability.ONLINE)
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(peer.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(
+                    text = peer.trustState.label(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (peer.trustState == TrustState.KEY_CHANGED) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(trailingIcon, contentDescription = trailingContentDescription)
+        }
     }
 }
 

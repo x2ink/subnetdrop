@@ -1,6 +1,9 @@
 package ink.x2.subnetdrop.ui
 
 import io.github.vinceglb.filekit.PlatformFile
+import ink.x2.subnetdrop.domain.model.FileTransfer
+import ink.x2.subnetdrop.domain.model.FileTransferDirection
+import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import kotlinx.coroutines.runBlocking
 import java.awt.datatransfer.DataFlavor
@@ -54,6 +57,36 @@ class PlatformFileDropTest {
             assertFailsWith<IllegalArgumentException> {
                 listOf(PlatformFile(file)).toTransferFiles(file.length() - 1L)
             }
+        }
+    }
+
+    @Test
+    fun completedFileMessageCanBePreparedForForwarding() {
+        runBlocking {
+            val file = Files.createTempFile("subnetdrop-forward-", ".txt").toFile().apply {
+                writeText("forward payload")
+                deleteOnExit()
+            }
+            val transfer = FileTransfer(
+                id = "transfer-1",
+                conversationId = "alice:bob",
+                peerId = "bob",
+                fileName = "original-name.txt",
+                size = file.length(),
+                createdAt = 100L,
+                contentType = "text/plain",
+                direction = FileTransferDirection.INCOMING,
+                status = FileTransferStatus.COMPLETED,
+                transferredBytes = file.length(),
+                localPath = file.absolutePath,
+            )
+
+            val forwarded = listOf(transfer).toForwardFiles(file.length()).single()
+
+            assertEquals("original-name.txt", forwarded.name)
+            assertEquals(file.absolutePath, forwarded.path)
+            assertEquals(file.length(), forwarded.size)
+            assertEquals("text/plain", forwarded.contentType)
         }
     }
 }

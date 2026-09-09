@@ -14,6 +14,8 @@ import ink.x2.subnetdrop.ui.buildChatTimeline
 import ink.x2.subnetdrop.ui.displaySaveDirectory
 import ink.x2.subnetdrop.ui.eligibleForwardTargets
 import ink.x2.subnetdrop.ui.isFileMessageExpired
+import ink.x2.subnetdrop.ui.isForwardable
+import ink.x2.subnetdrop.ui.isTerminal
 import ink.x2.subnetdrop.ui.toggle
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -66,6 +68,22 @@ class SharedCommonTest {
         assertFalse(isFileMessageExpired(completed, true))
         assertTrue(isFileMessageExpired(completed, false))
         assertFalse(isFileMessageExpired(completed.copy(status = FileTransferStatus.FAILED), false))
+    }
+
+    @Test
+    fun onlyCompletedFileWithLocalPathCanBeForwarded() {
+        val completed = transfer(
+            id = "completed",
+            peerId = "bob",
+            createdAt = 100L,
+            status = FileTransferStatus.COMPLETED,
+        ).copy(localPath = "/downloads/completed.txt")
+
+        assertTrue(completed.isTerminal())
+        assertTrue(completed.isForwardable())
+        assertFalse(completed.copy(localPath = null).isForwardable())
+        assertFalse(completed.copy(status = FileTransferStatus.TRANSFERRING).isTerminal())
+        assertFalse(completed.copy(status = FileTransferStatus.TRANSFERRING).isForwardable())
     }
 
     @Test

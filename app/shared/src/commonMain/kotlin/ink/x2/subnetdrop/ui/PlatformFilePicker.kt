@@ -15,6 +15,8 @@ import io.github.vinceglb.filekit.mimeType
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.path
 import io.github.vinceglb.filekit.size
+import ink.x2.subnetdrop.domain.model.FileTransfer
+import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.PUBLIC_DOWNLOADS_LOCATION
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.port.FileTransferService
@@ -87,6 +89,27 @@ internal suspend fun List<PlatformFile>.toTransferFiles(maxFileSizeBytes: Long):
         throw FileInputException(FileInputError.TOO_MANY_FILES)
     }
     return map { it.toTransferFile(maxFileSizeBytes) }
+}
+
+internal suspend fun List<FileTransfer>.toForwardFiles(maxFileSizeBytes: Long): List<LocalFile> {
+    if (isEmpty()) return emptyList()
+    if (size > FileTransferService.MAX_FILES_PER_BATCH) {
+        throw FileInputException(FileInputError.TOO_MANY_FILES)
+    }
+    return map { transfer -> transfer.toForwardFile(maxFileSizeBytes) }
+}
+
+private suspend fun FileTransfer.toForwardFile(maxFileSizeBytes: Long): LocalFile {
+    val sourcePath = localPath
+    if (status != FileTransferStatus.COMPLETED || sourcePath == null) {
+        throw FileInputException(FileInputError.FILE_CHANGED)
+    }
+    if (size > maxFileSizeBytes) throw FileInputException(FileInputError.FILE_TOO_LARGE)
+    val original = PlatformFile(sourcePath)
+    if (original.size() != size) throw FileInputException(FileInputError.FILE_CHANGED)
+    val source = if (sourcePath.startsWith(CONTENT_URI_PREFIX)) original.copyProviderFileToCache() else original
+    if (source.size() != size) throw FileInputException(FileInputError.FILE_CHANGED)
+    return LocalFile(name = fileName, path = source.path, size = size, contentType = contentType)
 }
 
 private suspend fun PlatformFile.toTransferFile(maxFileSizeBytes: Long): LocalFile {

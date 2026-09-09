@@ -103,6 +103,15 @@ class SqlDelightChatRepository(
         }
     }
 
+    override suspend fun deleteFileMessages(conversationId: String, transferIds: List<String>) {
+        if (transferIds.isEmpty()) return
+        queries.transaction {
+            transferIds.chunked(MAX_DELETE_BATCH_SIZE).forEach { batch ->
+                queries.deleteFileMessages(conversationId, batch)
+            }
+        }
+    }
+
     override suspend fun unreadIncomingMessageIds(conversationId: String): List<String> =
         queries.selectUnreadIncomingMessageIds(conversationId).executeAsList()
 
