@@ -818,33 +818,35 @@ private fun FileTransferMessage(
         onClick = { if (canOpen) openFile() },
         onActionMenuRequest = { onActionMenuRequest(transfer) },
     )
-    Box(Modifier.fillMaxWidth()) {
-        if (mediaKind != MediaMessageKind.FILE) {
-            MediaTransferMessage(
-                transfer = transfer,
-                kind = mediaKind,
-                outgoing = outgoing,
-                expired = expired,
-                canOpen = transfer.status == FileTransferStatus.COMPLETED && localFileExists == true,
-                interactionModifier = interactionModifier,
-                onCancel = { onCancelFile(transfer.id) },
-            )
-        } else {
-            StandardFileTransferMessage(
-                transfer = transfer,
-                outgoing = outgoing,
-                cancellable = cancellable,
-                expired = expired,
-                interactionModifier = interactionModifier,
-                onCancelFile = onCancelFile,
-            )
-        }
+    val actionMenu = @Composable {
         MessageActionMenu(
             expanded = interactionState.actionFileId == transfer.id,
             actions = FILE_MESSAGE_ACTIONS,
             enabledActions = enabledActions,
             onDismiss = onActionMenuDismiss,
             onAction = { action -> onFileAction(transfer, action) },
+        )
+    }
+    if (mediaKind != MediaMessageKind.FILE) {
+        MediaTransferMessage(
+            transfer = transfer,
+            kind = mediaKind,
+            outgoing = outgoing,
+            expired = expired,
+            canOpen = transfer.status == FileTransferStatus.COMPLETED && localFileExists == true,
+            interactionModifier = interactionModifier,
+            onCancel = { onCancelFile(transfer.id) },
+            actionMenu = actionMenu,
+        )
+    } else {
+        StandardFileTransferMessage(
+            transfer = transfer,
+            outgoing = outgoing,
+            cancellable = cancellable,
+            expired = expired,
+            interactionModifier = interactionModifier,
+            onCancelFile = onCancelFile,
+            actionMenu = actionMenu,
         )
     }
 }
@@ -857,91 +859,95 @@ private fun StandardFileTransferMessage(
     expired: Boolean,
     interactionModifier: Modifier,
     onCancelFile: (String) -> Unit,
+    actionMenu: @Composable () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
     ) {
-        Surface(
-            modifier = Modifier
-                .widthIn(max = MAX_FILE_MESSAGE_WIDTH)
-                .then(interactionModifier),
-            shape = MessageBubbleShape(pointingLeft = !outgoing),
-            color = if (outgoing) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-        ) {
-            Row(
-                modifier = Modifier.padding(
-                    start = if (outgoing) {
-                        BUBBLE_HORIZONTAL_PADDING
-                    } else {
-                        BUBBLE_HORIZONTAL_PADDING + 8.dp
-                    },
-                    end = if (outgoing) {
-                        BUBBLE_HORIZONTAL_PADDING + 8.dp
-                    } else {
-                        BUBBLE_HORIZONTAL_PADDING
-                    },
-                    top = BUBBLE_VERTICAL_PADDING,
-                    bottom = BUBBLE_VERTICAL_PADDING,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
+        Box {
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = MAX_FILE_MESSAGE_WIDTH)
+                    .then(interactionModifier),
+                shape = MessageBubbleShape(pointingLeft = !outgoing),
+                color = if (outgoing) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
             ) {
-                Surface(
-                    modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Outlined.AttachFile,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                Column(
-                    Modifier
-                        .padding(start = 12.dp)
-                        .widthIn(max = MAX_FILE_CONTENT_WIDTH)
-                        .width(IntrinsicSize.Max),
-                ) {
-                    Text(transfer.fileName, maxLines = 2, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        text = transfer.summary(expired),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (expired) {
-                            MaterialTheme.colorScheme.error
+                Row(
+                    modifier = Modifier.padding(
+                        start = if (outgoing) {
+                            BUBBLE_HORIZONTAL_PADDING
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            BUBBLE_HORIZONTAL_PADDING + 8.dp
                         },
-                    )
-                    if (cancellable) {
-                        LinearProgressIndicator(
-                            progress = { transfer.progress },
-                            modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
-                        )
+                        end = if (outgoing) {
+                            BUBBLE_HORIZONTAL_PADDING + 8.dp
+                        } else {
+                            BUBBLE_HORIZONTAL_PADDING
+                        },
+                        top = BUBBLE_VERTICAL_PADDING,
+                        bottom = BUBBLE_VERTICAL_PADDING,
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        modifier = Modifier.size(44.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Outlined.AttachFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
-                    transfer.error?.let { error ->
+                    Column(
+                        Modifier
+                            .padding(start = 12.dp)
+                            .widthIn(max = MAX_FILE_CONTENT_WIDTH)
+                            .width(IntrinsicSize.Max),
+                    ) {
+                        Text(transfer.fileName, maxLines = 2, fontWeight = FontWeight.SemiBold)
                         Text(
-                            text = error,
+                            text = transfer.summary(expired),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
+                            color = if (expired) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
+                        if (cancellable) {
+                            LinearProgressIndicator(
+                                progress = { transfer.progress },
+                                modifier = Modifier.fillMaxWidth().padding(top = 7.dp),
+                            )
+                        }
+                        transfer.error?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
-                }
-                if (cancellable) {
-                    IconButton(onClick = { onCancelFile(transfer.id) }) {
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = appString(AppString.CANCEL_FILE_TRANSFER),
-                        )
+                    if (cancellable) {
+                        IconButton(onClick = { onCancelFile(transfer.id) }) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = appString(AppString.CANCEL_FILE_TRANSFER),
+                            )
+                        }
                     }
                 }
             }
+            actionMenu()
         }
     }
 }

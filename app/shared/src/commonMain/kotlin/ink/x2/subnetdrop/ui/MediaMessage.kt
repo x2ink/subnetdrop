@@ -72,30 +72,37 @@ internal fun MediaTransferMessage(
     canOpen: Boolean,
     interactionModifier: Modifier,
     onCancel: () -> Unit,
+    actionMenu: @Composable () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val preferredWidth = (maxWidth * MEDIA_MESSAGE_WIDTH_FRACTION).coerceAtMost(MAX_MEDIA_MESSAGE_WIDTH)
         val cardWidth = preferredWidth.coerceAtLeast(minOf(MIN_MEDIA_MESSAGE_WIDTH, maxWidth))
-        Surface(
+        Box(
             modifier = Modifier
                 .align(if (outgoing) Alignment.CenterEnd else Alignment.CenterStart)
-                .width(cardWidth)
-                .aspectRatio(mediaMessageAspectRatio(kind))
-                .then(interactionModifier),
-            shape = MEDIA_MESSAGE_SHAPE,
-            color = if (outgoing) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
+                .width(cardWidth),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (canOpen && transfer.localPath != null) {
-                    CompletedMediaContent(transfer, kind)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(mediaMessageAspectRatio(kind))
+                    .then(interactionModifier),
+                shape = MEDIA_MESSAGE_SHAPE,
+                color = if (outgoing) {
+                    MaterialTheme.colorScheme.primaryContainer
                 } else {
-                    MediaTransferStateContent(transfer, kind, expired, onCancel)
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (canOpen && transfer.localPath != null) {
+                        CompletedMediaContent(transfer, kind)
+                    } else {
+                        MediaTransferStateContent(transfer, kind, expired, onCancel)
+                    }
                 }
             }
+            actionMenu()
         }
     }
 }
