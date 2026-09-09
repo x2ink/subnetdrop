@@ -100,6 +100,9 @@
     <string name="receive_file_title">ファイルを受信しますか？</string>
     <string name="receive_file_message">%1$s が %2$s（%3$s）を送信しようとしています</string>
     <string name="open_file_failed">既定のアプリでファイルを開けませんでした</string>
+    <string name="copy_file_failed">ファイルをコピーできませんでした</string>
+    <string name="paste_files_title">コピーしたファイルを送信しますか？</string>
+    <string name="paste_files_message">%2$s に %1$d 個のファイルを送信しますか？</string>
     <string name="file_picker_open_failed">ファイル選択画面を開けませんでした</string>
     <string name="selected_files_read_failed">選択したファイルを読み込めませんでした</string>
     <string name="directory_picker_open_failed">フォルダー選択画面を開けませんでした</string>
@@ -110,6 +113,7 @@
     <string name="file_too_large">このデバイスで設定されたサイズ上限を超えています</string>
     <string name="file_changed">転送準備中にファイルが変更されました</string>
     <string name="dropped_files_read_failed">ドロップされたファイルを読み込めませんでした</string>
+    <string name="clipboard_files_read_failed">クリップボードのファイルを読み込めませんでした</string>
     <string name="drop_files_only">ここにはファイルのみドロップできます</string>
     <string name="drop_regular_files_only">通常ファイルのみ対応しています。フォルダーは送信できません</string>
     <string name="local_profile_not_ready">このデバイスはまだ準備できていません</string>

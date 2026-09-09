@@ -48,6 +48,7 @@ SubnetDrop 是 Android、macOS 和 Windows 之间的无中心局域网传输工�
 - [离线设备自动恢复验证](tasks/verification/2026-09-07-offline-peer-recovery.md)
 - [首页手动刷新附近设备验证](tasks/verification/2026-09-07-manual-discovery-refresh.md)
 - [桌面聊天页拖放发送文件验证](tasks/verification/2026-09-08-desktop-file-drop.md)
+- [桌面文件剪贴板与消息交互验证](tasks/verification/2026-09-09-desktop-file-clipboard.md)
 - [中英日三语适配验证](tasks/verification/2026-09-08-localization.md)
 - [应用内语言切换验证](tasks/verification/2026-09-08-app-language-setting.md)
 - [附近设备删除与历史清理验证](tasks/verification/2026-09-08-peer-deletion.md)

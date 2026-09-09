@@ -6,8 +6,7 @@ import ink.x2.subnetdrop.domain.model.FileTransferDirection
 import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import kotlinx.coroutines.runBlocking
-import java.awt.datatransfer.DataFlavor
-import java.awt.datatransfer.Transferable
+import java.awt.datatransfer.Clipboard
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -16,10 +15,12 @@ import kotlin.test.assertFailsWith
 
 class PlatformFileDropTest {
     @Test
-    fun readsRegularFilesFromDesktopTransferable() {
+    fun nativeFileClipboardPayloadRoundTripsAsRegularFiles() {
         val file = Files.createTempFile("subnetdrop-drop-", ".txt").toFile().apply(File::deleteOnExit)
+        val clipboard = Clipboard("SubnetDrop test")
+        clipboard.setContents(localFileListTransferable(listOf(file)), null)
 
-        assertEquals(listOf(file), FileListTransferable(listOf(file)).readRegularFiles())
+        assertEquals(listOf(file), requireNotNull(clipboard.getContents(null)).readRegularFiles())
     }
 
     @Test
@@ -27,7 +28,7 @@ class PlatformFileDropTest {
         val directory = Files.createTempDirectory("subnetdrop-drop-").toFile().apply(File::deleteOnExit)
 
         assertFailsWith<IllegalArgumentException> {
-            FileListTransferable(listOf(directory)).readRegularFiles()
+            localFileListTransferable(listOf(directory)).readRegularFiles()
         }
     }
 
@@ -37,7 +38,7 @@ class PlatformFileDropTest {
         val files = List(FileTransferService.MAX_FILES_PER_BATCH + 1) { file }
 
         assertFailsWith<IllegalArgumentException> {
-            FileListTransferable(files).readRegularFiles()
+            localFileListTransferable(files).readRegularFiles()
         }
     }
 
@@ -88,16 +89,5 @@ class PlatformFileDropTest {
             assertEquals(file.length(), forwarded.size)
             assertEquals("text/plain", forwarded.contentType)
         }
-    }
-}
-
-private class FileListTransferable(private val files: List<File>) : Transferable {
-    override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(DataFlavor.javaFileListFlavor)
-
-    override fun isDataFlavorSupported(flavor: DataFlavor): Boolean = flavor == DataFlavor.javaFileListFlavor
-
-    override fun getTransferData(flavor: DataFlavor): Any {
-        require(isDataFlavorSupported(flavor))
-        return files
     }
 }

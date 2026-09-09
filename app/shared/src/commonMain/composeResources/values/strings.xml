@@ -100,6 +100,9 @@
     <string name="receive_file_title">Receive file?</string>
     <string name="receive_file_message">%1$s wants to send %2$s (%3$s)</string>
     <string name="open_file_failed">Could not open the file with the default application</string>
+    <string name="copy_file_failed">Could not copy the file</string>
+    <string name="paste_files_title">Send copied files?</string>
+    <string name="paste_files_message">Send %1$d files to %2$s?</string>
     <string name="file_picker_open_failed">Could not open the file picker</string>
     <string name="selected_files_read_failed">Could not read the selected files</string>
     <string name="directory_picker_open_failed">Could not open the folder picker</string>
@@ -110,6 +113,7 @@
     <string name="file_too_large">The file exceeds this device’s size limit</string>
     <string name="file_changed">The file changed while it was being prepared</string>
     <string name="dropped_files_read_failed">Could not read the dropped files</string>
+    <string name="clipboard_files_read_failed">Could not read files from the clipboard</string>
     <string name="drop_files_only">Only files can be dropped here</string>
     <string name="drop_regular_files_only">Only regular files are supported; folders cannot be sent</string>
     <string name="local_profile_not_ready">This device is not ready yet</string>

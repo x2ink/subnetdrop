@@ -152,6 +152,7 @@ internal enum class FileInputError {
     FILE_TOO_LARGE,
     FILE_CHANGED,
     DROPPED_FILES_READ_FAILED,
+    CLIPBOARD_FILES_READ_FAILED,
     FILES_ONLY,
     REGULAR_FILES_ONLY,
 }
@@ -190,6 +191,7 @@ internal fun fileInputMessages(): FileInputMessages = FileInputMessages(
         FileInputError.FILE_TOO_LARGE to appString(AppString.FILE_TOO_LARGE),
         FileInputError.FILE_CHANGED to appString(AppString.FILE_CHANGED),
         FileInputError.DROPPED_FILES_READ_FAILED to appString(AppString.DROPPED_FILES_READ_FAILED),
+        FileInputError.CLIPBOARD_FILES_READ_FAILED to appString(AppString.CLIPBOARD_FILES_READ_FAILED),
         FileInputError.FILES_ONLY to appString(AppString.DROP_FILES_ONLY),
         FileInputError.REGULAR_FILES_ONLY to appString(AppString.DROP_REGULAR_FILES_ONLY),
     ),

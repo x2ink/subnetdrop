@@ -61,6 +61,16 @@ clear “release to send” affordance without changing the timeline layout. Dro
 send callback as the attachment picker; leaving or ending the drag removes the overlay. Android does not register this
 desktop-only interaction.
 
+Message items do not render hover, pressed or ripple feedback; those pointer states must not be mistaken for message
+selection. Their double-click, long-press and desktop secondary-click gesture recognizers remain active. Copying a file
+message on desktop writes an operating-system file-list payload, so Finder, Explorer and other applications receive the
+file rather than a text filename.
+
+When the desktop composer has focus, Ctrl/Cmd+V first checks for an operating-system file-list payload. Plain text keeps
+the text field's normal paste behavior. A file list enters the same batch/count/size validation used by the picker and
+drop target, then displays an explicit confirmation with destination and filenames. No transfer starts until the user
+confirms; cancelling makes no network or database change. Android does not register desktop file-list paste handling.
+
 Clearing the current selection must not emit an empty text-message list while Navigation 3 may still retain the outgoing
 entry. The last list remains available until the entry is disposed, and the timeline filters text rows by conversation ID
 so a newly selected peer cannot briefly display another conversation.
@@ -84,3 +94,6 @@ so a newly selected peer cannot briefly display another conversation.
     Ctrl/Cmd+C without selecting delivery state text.
 13. Dropping regular files onto an open desktop chat displays an explicit affordance and invokes the existing batch file
     send path; leaving the chat or completing the drag always removes the affordance.
+14. Message items have no hover/pressed/ripple visual state while all configured context gestures remain available.
+15. Desktop file copy produces a native file-list clipboard payload, and pasting files into the composer requires an
+    explicit confirmation before invoking the existing batch send path; ordinary text paste is unchanged.

@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -126,6 +129,7 @@ fun ChatScreen(
     var forwardFileQueue by remember(selection.conversationId) { mutableStateOf(emptyList<FileTransfer>()) }
     var deleteQueue by remember(selection.conversationId) { mutableStateOf(emptyList<Message>()) }
     var deleteFileQueue by remember(selection.conversationId) { mutableStateOf(emptyList<FileTransfer>()) }
+    var pastedFilesToConfirm by remember(selection.conversationId) { mutableStateOf(emptyList<LocalFile>()) }
     val selectedMessages = remember(messages, selectedMessageIds) {
         messages.filter { it.id in selectedMessageIds }
     }
@@ -151,6 +155,7 @@ fun ChatScreen(
         if (partialSelectionMessageId !in availableIds) partialSelectionMessageId = null
     }
     val openFileFailed = appString(AppString.OPEN_FILE_FAILED)
+    val copyFileFailed = appString(AppString.COPY_FILE_FAILED)
     val openFile = { transfer: FileTransfer ->
         runCatching {
             FileKit.openFileWithDefaultApplication(PlatformFile(requireNotNull(transfer.localPath)))
@@ -229,7 +234,14 @@ fun ChatScreen(
                     actionFileId = null
                     when (action) {
                         MessageAction.COPY -> coroutineScope.launch {
-                            clipboard.setClipEntry(plainTextClipEntry(transfer.fileName))
+                            val localPath = transfer.localPath ?: return@launch
+                            try {
+                                clipboard.setClipEntry(localFileClipEntry(localPath))
+                            } catch (exception: CancellationException) {
+                                throw exception
+                            } catch (exception: Exception) {
+                                onFilePickerError(inputMessages.withDetail(copyFileFailed, exception.message))
+                            }
                         }
                         MessageAction.FORWARD -> forwardFileQueue = listOf(transfer)
                         MessageAction.DELETE -> deleteFileQueue = listOf(transfer)
@@ -261,6 +273,9 @@ fun ChatScreen(
                 partialSelectionMessageId == null -> Composer(
                     onSend = onSend,
                     onAttachFile = launchFilePicker,
+                    maxFileSizeBytes = maxFileSizeBytes,
+                    onFilesPasted = { pastedFilesToConfirm = it },
+                    onFilePasteError = { error -> onFilePickerError(inputMessages.forError(error)) },
                     onInputFocused = {
                         coroutineScope.launch {
                             if (timelineListState.layoutInfo.totalItemsCount > 0) {
@@ -318,6 +333,18 @@ fun ChatScreen(
                 selectedMessageIds = emptySet()
                 selectedFileIds = emptySet()
                 onDeleteItems(messagesToDelete, filesToDelete)
+            },
+        )
+    }
+    if (pastedFilesToConfirm.isNotEmpty()) {
+        ConfirmPastedFilesDialog(
+            files = pastedFilesToConfirm,
+            peerDisplayName = selection.peerDisplayName,
+            onDismiss = { pastedFilesToConfirm = emptyList() },
+            onConfirm = {
+                val files = pastedFilesToConfirm
+                pastedFilesToConfirm = emptyList()
+                onSendFiles(files)
             },
         )
     }
@@ -505,7 +532,9 @@ private fun TimelineFileMessage(
                 onClick = { onFileSelectionToggle(transfer.id) },
             )
             Box(
-                modifier = Modifier.weight(1f).clickable { onFileSelectionToggle(transfer.id) },
+                modifier = Modifier
+                    .weight(1f)
+                    .clickableWithoutVisualFeedback { onFileSelectionToggle(transfer.id) },
             ) {
                 FileTransferMessage(
                     transfer = transfer,
@@ -550,7 +579,7 @@ private fun TimelineTextMessage(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { onMessageSelectionToggle(message.id) },
+                    .clickableWithoutVisualFeedback { onMessageSelectionToggle(message.id) },
             ) {
                 MessageBubble(
                     message = message,
@@ -664,21 +693,37 @@ private fun MessageBody(message: Message, outgoing: Boolean, textSelectionEnable
     }
 }
 
+@Composable
 private fun Modifier.messageInteraction(
     enabled: Boolean,
     longClickLabel: String,
     onClick: () -> Unit = {},
     onActionMenuRequest: () -> Unit,
-): Modifier = if (enabled) {
-    platformSecondaryClick(onActionMenuRequest)
-        .combinedClickable(
-            onClick = onClick,
-            onDoubleClick = onActionMenuRequest,
-            onLongClickLabel = longClickLabel,
-            onLongClick = onActionMenuRequest,
-        )
-} else {
-    this
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    return if (enabled) {
+        platformSecondaryClick(onActionMenuRequest)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onDoubleClick = onActionMenuRequest,
+                onLongClickLabel = longClickLabel,
+                onLongClick = onActionMenuRequest,
+            )
+    } else {
+        this
+    }
+}
+
+@Composable
+private fun Modifier.clickableWithoutVisualFeedback(onClick: () -> Unit): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    return clickable(
+        interactionSource = interactionSource,
+        indication = null,
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -691,7 +736,13 @@ private fun DeliveryState(
     Row(
         modifier = Modifier
             .padding(top = 4.dp, end = 4.dp)
-            .then(if (failed && retryEnabled) Modifier.clickable { onRetryMessage(message) } else Modifier),
+            .then(
+                if (failed && retryEnabled) {
+                    Modifier.clickableWithoutVisualFeedback { onRetryMessage(message) }
+                } else {
+                    Modifier
+                },
+            ),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -754,7 +805,7 @@ private fun FileTransferMessage(
     val terminal = transfer.isTerminal()
     val forwardable = transfer.isForwardable() && localFileExists == true
     val enabledActions = buildSet {
-        add(MessageAction.COPY)
+        if (transfer.localPath != null && localFileExists == true) add(MessageAction.COPY)
         if (forwardable) add(MessageAction.FORWARD)
         if (terminal) {
             add(MessageAction.DELETE)
@@ -899,6 +950,9 @@ private fun StandardFileTransferMessage(
 private fun Composer(
     onSend: (String) -> Unit,
     onAttachFile: () -> Unit,
+    maxFileSizeBytes: Long,
+    onFilesPasted: (List<LocalFile>) -> Unit,
+    onFilePasteError: (FileInputError) -> Unit,
     onInputFocused: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
@@ -924,6 +978,11 @@ private fun Composer(
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 52.dp, max = 132.dp)
+                    .platformFilePasteTarget(
+                        maxFileSizeBytes = maxFileSizeBytes,
+                        onFilesPasted = onFilesPasted,
+                        onError = onFilePasteError,
+                    )
                     .onFocusChanged { state ->
                         if (state.isFocused) onInputFocused()
                     },
@@ -943,6 +1002,52 @@ private fun Composer(
             }
         }
     }
+}
+
+@Composable
+private fun ConfirmPastedFilesDialog(
+    files: List<LocalFile>,
+    peerDisplayName: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(appString(AppString.PASTE_FILES_TITLE)) },
+        text = {
+            Column {
+                Text(appString(AppString.PASTE_FILES_MESSAGE, files.size, peerDisplayName))
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(files) { file ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.AttachFile,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                                Text(file.name, maxLines = 1)
+                                Text(
+                                    formatFileSize(file.size),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(appString(AppString.SEND_FILE)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(appString(AppString.ACTION_CANCEL)) }
+        },
+    )
 }
 
 @Composable
