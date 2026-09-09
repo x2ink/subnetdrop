@@ -6,10 +6,15 @@ import ink.x2.subnetdrop.domain.model.FileTransferDirection
 import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
+import ink.x2.subnetdrop.domain.model.Peer
+import ink.x2.subnetdrop.domain.model.PeerAvailability
+import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.ui.ChatTimelineItem
 import ink.x2.subnetdrop.ui.buildChatTimeline
 import ink.x2.subnetdrop.ui.displaySaveDirectory
+import ink.x2.subnetdrop.ui.eligibleForwardTargets
 import ink.x2.subnetdrop.ui.isFileMessageExpired
+import ink.x2.subnetdrop.ui.toggle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -75,6 +80,28 @@ class SharedCommonTest {
         assertEquals("/chosen", displaySaveDirectory("/chosen", "Public downloads"))
     }
 
+    @Test
+    fun forwardTargetsContainOnlyOnlineTrustedPeers() {
+        val targets = eligibleForwardTargets(
+            listOf(
+                peer("trusted-online", "Bravo", PeerAvailability.ONLINE, TrustState.TRUSTED),
+                peer("trusted-offline", "Alpha", PeerAvailability.OFFLINE, TrustState.TRUSTED),
+                peer("unpaired-online", "Charlie", PeerAvailability.ONLINE, TrustState.UNPAIRED),
+                peer("trusted-online-2", "Alpha", PeerAvailability.ONLINE, TrustState.TRUSTED),
+            ),
+        )
+
+        assertEquals(listOf("trusted-online-2", "trusted-online"), targets.map(Peer::id))
+    }
+
+    @Test
+    fun togglingMessageSelectionAddsAndRemovesOnlyRequestedId() {
+        val selected = setOf("first")
+
+        assertEquals(setOf("first", "second"), selected.toggle("second"))
+        assertEquals(emptySet(), selected.toggle("first"))
+    }
+
     private fun message(
         id: String,
         createdAt: Long,
@@ -105,5 +132,20 @@ class SharedCommonTest {
         createdAt = createdAt,
         direction = FileTransferDirection.OUTGOING,
         status = status,
+    )
+
+    private fun peer(
+        id: String,
+        name: String,
+        availability: PeerAvailability,
+        trustState: TrustState,
+    ) = Peer(
+        id = id,
+        displayName = name,
+        host = "192.168.1.10",
+        port = 45_892,
+        availability = availability,
+        trustState = trustState,
+        lastSeenAt = 100L,
     )
 }

@@ -175,6 +175,10 @@ INSERT OR IGNORE INTO messageEntity(
 updateMessageStatus:
 UPDATE messageEntity SET status = ? WHERE id = ?;
 
+deleteMessages:
+DELETE FROM messageEntity
+WHERE conversation_id = ? AND id IN ?;
+
 selectUnreadIncomingMessageIds:
 SELECT id
 FROM messageEntity

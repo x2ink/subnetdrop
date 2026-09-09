@@ -150,6 +150,9 @@ private fun WideContent(ui: AppUiState, viewModel: SubnetDropViewModel, sidebarW
             onSendFiles = viewModel::sendFiles,
             onCancelFile = viewModel::cancelFile,
             onFilePickerError = viewModel::reportFilePickerError,
+            peers = ui.peers,
+            onForwardMessages = viewModel::forward,
+            onDeleteMessages = viewModel::delete,
         )
     }
 }
@@ -201,6 +204,9 @@ private fun CompactContent(ui: AppUiState, viewModel: SubnetDropViewModel) {
                         onSendFiles = viewModel::sendFiles,
                         onCancelFile = viewModel::cancelFile,
                         onFilePickerError = viewModel::reportFilePickerError,
+                        peers = latestUi.value.peers,
+                        onForwardMessages = viewModel::forward,
+                        onDeleteMessages = viewModel::delete,
                     )
                 }
                 else -> error("Unknown navigation route: $route")

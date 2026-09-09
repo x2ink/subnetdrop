@@ -48,6 +48,8 @@ private class ReadStateRepository(
 
     override suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus) = Unit
 
+    override suspend fun deleteMessages(conversationId: String, messageIds: List<String>) = Unit
+
     override suspend fun unreadIncomingMessageIds(conversationId: String): List<String> = unreadIds
 
     override suspend fun markConversationRead(conversationId: String) {

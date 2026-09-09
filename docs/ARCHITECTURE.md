@@ -167,6 +167,10 @@ interface TrustedIdentityRepository
 协议或实现替换应优先保持端口语义稳定。若必须修改数据库字段、帧类型或加密关联数据，先更新 `docs/spec/`，
 明确兼容策略与迁移，再修改实现。
 
+聊天文字消息的复制、部分选中、本地删除、跨设备转发和多选状态语义见
+[文字消息操作 v1](spec/message-actions-v1.md)。这些瞬时交互状态由共享 Compose UI 持有，删除与转发分别通过
+领域用例进入 `ChatRepository` 和 `ChatTransport`，Composable 不直接访问数据库或网络。
+
 ## 数据与安全边界
 
 - SQLite 是设备资料、受信身份、会话和消息的本地事实来源。

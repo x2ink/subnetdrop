@@ -19,6 +19,8 @@ interface ChatRepository {
 
     suspend fun updateMessageStatus(messageId: String, status: DeliveryStatus)
 
+    suspend fun deleteMessages(conversationId: String, messageIds: List<String>)
+
     suspend fun unreadIncomingMessageIds(conversationId: String): List<String>
 
     suspend fun markConversationRead(conversationId: String)

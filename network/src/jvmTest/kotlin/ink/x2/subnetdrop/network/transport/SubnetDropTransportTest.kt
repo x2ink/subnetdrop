@@ -666,6 +666,12 @@ private class TestChatRepository : ChatRepository {
         }
     }
 
+    override suspend fun deleteMessages(conversationId: String, messageIds: List<String>) {
+        messages.value = messages.value.filterNot { message ->
+            message.conversationId == conversationId && message.id in messageIds
+        }
+    }
+
     override suspend fun unreadIncomingMessageIds(conversationId: String): List<String> = messages.value
         .filter { it.conversationId == conversationId && it.direction == MessageDirection.INCOMING && !it.isRead }
         .map(Message::id)

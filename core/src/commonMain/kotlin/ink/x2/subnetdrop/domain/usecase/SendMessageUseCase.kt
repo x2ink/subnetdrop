@@ -21,6 +21,20 @@ class SendMessageUseCase(
         senderId: String,
         recipientId: String,
         body: String,
+    ): Result<Message> = sendAt(
+        conversationId = conversationId,
+        senderId = senderId,
+        recipientId = recipientId,
+        body = body,
+        createdAt = timestampProvider.nowMillis(),
+    )
+
+    internal suspend fun sendAt(
+        conversationId: String,
+        senderId: String,
+        recipientId: String,
+        body: String,
+        createdAt: Long,
     ): Result<Message> {
         val normalizedBody = body.trim()
         require(normalizedBody.isNotEmpty()) { "Message body cannot be blank" }
@@ -32,7 +46,7 @@ class SendMessageUseCase(
             senderId = senderId,
             recipientId = recipientId,
             body = normalizedBody,
-            createdAt = timestampProvider.nowMillis(),
+            createdAt = createdAt,
             direction = MessageDirection.OUTGOING,
             status = DeliveryStatus.PENDING,
         )

@@ -7,6 +7,7 @@ import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
 import ink.x2.subnetdrop.domain.model.Peer
+import ink.x2.subnetdrop.domain.model.PeerAvailability
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.domain.model.conversationIdFor
 import ink.x2.subnetdrop.domain.port.AppSettingsRepository
@@ -14,6 +15,8 @@ import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.domain.port.FileTransferSettingsRepository
 import ink.x2.subnetdrop.domain.port.PairingCandidate
 import ink.x2.subnetdrop.domain.port.PairingService
+import ink.x2.subnetdrop.domain.usecase.DeleteMessagesUseCase
+import ink.x2.subnetdrop.domain.usecase.ForwardMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.MarkConversationReadUseCase
 import ink.x2.subnetdrop.domain.usecase.ObserveFileMessagesUseCase
 import ink.x2.subnetdrop.domain.usecase.ObserveMessagesUseCase
@@ -43,6 +46,8 @@ class SubnetDropViewModel(
     private val observeMessages: ObserveMessagesUseCase,
     private val observeFileMessages: ObserveFileMessagesUseCase,
     private val sendMessage: SendMessageUseCase,
+    private val forwardMessages: ForwardMessagesUseCase,
+    private val deleteMessages: DeleteMessagesUseCase,
     private val markConversationRead: MarkConversationReadUseCase,
     private val pairingService: PairingService,
     private val fileTransferService: FileTransferService,
@@ -126,6 +131,35 @@ class SubnetDropViewModel(
 
     fun retry(message: Message) = launchAction(AppString.MESSAGE_RETRY_FAILED) {
         sendMessage.retry(message).getOrThrow()
+    }
+
+    fun forward(messages: List<Message>, targetPeer: Peer) {
+        if (messages.isEmpty()) return
+        if (targetPeer.availability != PeerAvailability.ONLINE || targetPeer.trustState != TrustState.TRUSTED) {
+            return showError(AppString.FORWARD_TARGET_UNAVAILABLE)
+        }
+        val senderId = localProfile.value?.deviceId ?: return showError(AppString.LOCAL_PROFILE_NOT_READY)
+        launchAction(AppString.MESSAGE_FORWARD_FAILED) {
+            forwardMessages(
+                messages = messages,
+                targetConversationId = conversationIdFor(senderId, targetPeer.id),
+                senderId = senderId,
+                recipientId = targetPeer.id,
+            ).getOrThrow()
+            showMessage(AppString.MESSAGES_FORWARDED, messages.size)
+        }
+    }
+
+    fun delete(messages: List<Message>) {
+        val selected = selection.value ?: return
+        val messageIds = messages
+            .filter { it.conversationId == selected.conversationId }
+            .map(Message::id)
+        if (messageIds.isEmpty()) return
+        launchAction(AppString.MESSAGE_DELETE_FAILED) {
+            deleteMessages(selected.conversationId, messageIds).getOrThrow()
+            showMessage(AppString.MESSAGES_DELETED, messageIds.size)
+        }
     }
 
     fun updateDisplayName(displayName: String) = launchAction(AppString.DISPLAY_NAME_UPDATE_FAILED) {

@@ -94,6 +94,15 @@ class SqlDelightChatRepository(
         queries.updateMessageStatus(status.name, messageId)
     }
 
+    override suspend fun deleteMessages(conversationId: String, messageIds: List<String>) {
+        if (messageIds.isEmpty()) return
+        queries.transaction {
+            messageIds.chunked(MAX_DELETE_BATCH_SIZE).forEach { batch ->
+                queries.deleteMessages(conversationId, batch)
+            }
+        }
+    }
+
     override suspend fun unreadIncomingMessageIds(conversationId: String): List<String> =
         queries.selectUnreadIncomingMessageIds(conversationId).executeAsList()
 
@@ -184,5 +193,9 @@ class SqlDelightChatRepository(
         FileTransferStatus.WAITING_FOR_ACCEPTANCE,
         FileTransferStatus.TRANSFERRING,
         -> false
+    }
+
+    private companion object {
+        const val MAX_DELETE_BATCH_SIZE = 500
     }
 }

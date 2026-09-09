@@ -129,6 +129,24 @@ class SqlDelightPersistenceTest {
         }
     }
 
+    @Test
+    fun deletesOnlyRequestedMessagesFromTheRequestedConversation() = runTest {
+        withSeededDatabase { database ->
+            val repository = SqlDelightChatRepository(database)
+
+            repository.deleteMessages(CONVERSATION_ID, listOf("message-1", "not-present"))
+
+            assertEquals(
+                listOf("message-2"),
+                repository.observeMessages(CONVERSATION_ID).first().map(Message::id),
+            )
+            assertEquals(
+                listOf("transfer-1"),
+                repository.observeFileMessages(CONVERSATION_ID).first().map(FileTransfer::id),
+            )
+        }
+    }
+
     private suspend fun withSeededDatabase(block: suspend (ChatDatabase) -> Unit) {
         val databasePath = Files.createTempDirectory("subnetdrop-delete-test").resolve("chat.db")
         val driver = DesktopDatabaseDriverFactory(databasePath.toFile()).createDriver()

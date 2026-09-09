@@ -3,6 +3,7 @@ package ink.x2.subnetdrop.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,6 +60,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -75,6 +77,7 @@ import ink.x2.subnetdrop.domain.model.FileTransferStatus
 import ink.x2.subnetdrop.domain.model.LocalFile
 import ink.x2.subnetdrop.domain.model.Message
 import ink.x2.subnetdrop.domain.model.MessageDirection
+import ink.x2.subnetdrop.domain.model.Peer
 import ink.x2.subnetdrop.domain.port.FileTransferService
 import ink.x2.subnetdrop.presentation.ChatSelection
 import ink.x2.subnetdrop.resources.AppString
@@ -99,6 +102,9 @@ fun ChatScreen(
     onSendFiles: (List<LocalFile>) -> Unit,
     onCancelFile: (String) -> Unit,
     onFilePickerError: (String) -> Unit,
+    peers: List<Peer>,
+    onForwardMessages: (List<Message>, Peer) -> Unit,
+    onDeleteMessages: (List<Message>) -> Unit,
 ) {
     if (selection == null) {
         EmptyChat(modifier)
@@ -108,7 +114,23 @@ fun ChatScreen(
     val inputMessages = fileInputMessages()
     val timelineListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val clipboard = LocalClipboard.current
     var isFileDragActive by remember { mutableStateOf(false) }
+    var actionMessageId by remember(selection.conversationId) { mutableStateOf<String?>(null) }
+    var partialSelectionMessageId by remember(selection.conversationId) { mutableStateOf<String?>(null) }
+    var multiSelectActive by remember(selection.conversationId) { mutableStateOf(false) }
+    var selectedMessageIds by remember(selection.conversationId) { mutableStateOf(emptySet<String>()) }
+    var forwardQueue by remember(selection.conversationId) { mutableStateOf(emptyList<Message>()) }
+    var deleteQueue by remember(selection.conversationId) { mutableStateOf(emptyList<Message>()) }
+    val selectedMessages = remember(messages, selectedMessageIds) {
+        messages.filter { it.id in selectedMessageIds }
+    }
+    LaunchedEffect(messages) {
+        val availableIds = messages.mapTo(mutableSetOf(), Message::id)
+        selectedMessageIds = selectedMessageIds.intersect(availableIds)
+        if (actionMessageId !in availableIds) actionMessageId = null
+        if (partialSelectionMessageId !in availableIds) partialSelectionMessageId = null
+    }
     val openFileFailed = appString(AppString.OPEN_FILE_FAILED)
     val openFile = { transfer: FileTransfer ->
         runCatching {
@@ -132,7 +154,16 @@ fun ChatScreen(
             ),
     ) {
         Column(Modifier.fillMaxSize().imePadding()) {
-            ChatHeader(selection.peerDisplayName, showBack, onBack)
+            when {
+                multiSelectActive -> MessageModeHeader(selectedMessages.size) {
+                    multiSelectActive = false
+                    selectedMessageIds = emptySet()
+                }
+                partialSelectionMessageId != null -> MessageModeHeader(selectedCount = null) {
+                    partialSelectionMessageId = null
+                }
+                else -> ChatHeader(selection.peerDisplayName, showBack, onBack)
+            }
             ChatTimeline(
                 messages = messages,
                 storedFileMessages = storedFileMessages,
@@ -144,20 +175,80 @@ fun ChatScreen(
                 onRetryMessage = onRetryMessage,
                 onCancelFile = onCancelFile,
                 onOpenFile = openFile,
-            )
-            Composer(
-                onSend = onSend,
-                onAttachFile = launchFilePicker,
-                onInputFocused = {
-                    coroutineScope.launch {
-                        if (timelineListState.layoutInfo.totalItemsCount > 0) {
-                            timelineListState.scrollToItem(0)
+                interactionState = MessageInteractionState(
+                    actionMessageId = actionMessageId,
+                    partialSelectionMessageId = partialSelectionMessageId,
+                    multiSelectActive = multiSelectActive,
+                    selectedMessageIds = selectedMessageIds,
+                ),
+                onActionMenuRequest = { actionMessageId = it.id },
+                onActionMenuDismiss = { actionMessageId = null },
+                onMessageAction = { message, action ->
+                    actionMessageId = null
+                    when (action) {
+                        MessageAction.COPY -> coroutineScope.launch {
+                            clipboard.setClipEntry(plainTextClipEntry(message.body))
+                        }
+                        MessageAction.FORWARD -> forwardQueue = listOf(message)
+                        MessageAction.PARTIAL_SELECT -> partialSelectionMessageId = message.id
+                        MessageAction.DELETE -> deleteQueue = listOf(message)
+                        MessageAction.MULTI_SELECT -> {
+                            multiSelectActive = true
+                            selectedMessageIds = setOf(message.id)
                         }
                     }
                 },
+                onMessageSelectionToggle = { messageId ->
+                    selectedMessageIds = selectedMessageIds.toggle(messageId)
+                },
             )
+            when {
+                multiSelectActive -> MultiSelectActionBar(
+                    selectedCount = selectedMessages.size,
+                    onForward = { forwardQueue = selectedMessages },
+                    onDelete = { deleteQueue = selectedMessages },
+                )
+                partialSelectionMessageId == null -> Composer(
+                    onSend = onSend,
+                    onAttachFile = launchFilePicker,
+                    onInputFocused = {
+                        coroutineScope.launch {
+                            if (timelineListState.layoutInfo.totalItemsCount > 0) {
+                                timelineListState.scrollToItem(0)
+                            }
+                        }
+                    },
+                )
+            }
         }
         if (isFileDragActive) FileDropOverlay()
+    }
+    if (forwardQueue.isNotEmpty()) {
+        ForwardMessagesDialog(
+            messageCount = forwardQueue.size,
+            peers = peers,
+            onDismiss = { forwardQueue = emptyList() },
+            onPeerSelected = { peer ->
+                val messagesToForward = forwardQueue
+                forwardQueue = emptyList()
+                multiSelectActive = false
+                selectedMessageIds = emptySet()
+                onForwardMessages(messagesToForward, peer)
+            },
+        )
+    }
+    if (deleteQueue.isNotEmpty()) {
+        DeleteMessagesDialog(
+            messageCount = deleteQueue.size,
+            onDismiss = { deleteQueue = emptyList() },
+            onConfirm = {
+                val messagesToDelete = deleteQueue
+                deleteQueue = emptyList()
+                multiSelectActive = false
+                selectedMessageIds = emptySet()
+                onDeleteMessages(messagesToDelete)
+            },
+        )
     }
 }
 
@@ -275,6 +366,11 @@ private fun ChatTimeline(
     onRetryMessage: (Message) -> Unit,
     onCancelFile: (String) -> Unit,
     onOpenFile: (FileTransfer) -> Unit,
+    interactionState: MessageInteractionState,
+    onActionMenuRequest: (Message) -> Unit,
+    onActionMenuDismiss: () -> Unit,
+    onMessageAction: (Message, MessageAction) -> Unit,
+    onMessageSelectionToggle: (String) -> Unit,
 ) {
     val timelineItems = remember(messages, storedFileMessages, transfers, conversationId, peerId) {
         buildChatTimeline(messages, storedFileMessages, transfers, conversationId, peerId)
@@ -292,7 +388,15 @@ private fun ChatTimeline(
     ) {
         items(displayItems, key = ChatTimelineItem::stableKey) { item ->
             when (item) {
-                is ChatTimelineItem.TextMessage -> MessageBubble(item.message, onRetryMessage)
+                is ChatTimelineItem.TextMessage -> TimelineTextMessage(
+                    message = item.message,
+                    interactionState = interactionState,
+                    onRetryMessage = onRetryMessage,
+                    onActionMenuRequest = onActionMenuRequest,
+                    onActionMenuDismiss = onActionMenuDismiss,
+                    onMessageAction = onMessageAction,
+                    onMessageSelectionToggle = onMessageSelectionToggle,
+                )
                 is ChatTimelineItem.FileMessage -> FileTransferMessage(item.transfer, onCancelFile, onOpenFile)
             }
         }
@@ -300,70 +404,164 @@ private fun ChatTimeline(
 }
 
 @Composable
-private fun MessageBubble(message: Message, onRetryMessage: (Message) -> Unit) {
+private fun TimelineTextMessage(
+    message: Message,
+    interactionState: MessageInteractionState,
+    onRetryMessage: (Message) -> Unit,
+    onActionMenuRequest: (Message) -> Unit,
+    onActionMenuDismiss: () -> Unit,
+    onMessageAction: (Message, MessageAction) -> Unit,
+    onMessageSelectionToggle: (String) -> Unit,
+) {
+    if (interactionState.multiSelectActive) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MessageSelectionIndicator(
+                selected = message.id in interactionState.selectedMessageIds,
+                onClick = { onMessageSelectionToggle(message.id) },
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onMessageSelectionToggle(message.id) },
+            ) {
+                MessageBubble(
+                    message = message,
+                    onRetryMessage = onRetryMessage,
+                    interactionState = interactionState,
+                    onActionMenuRequest = onActionMenuRequest,
+                    onActionMenuDismiss = onActionMenuDismiss,
+                    onMessageAction = onMessageAction,
+                )
+            }
+        }
+    } else {
+        MessageBubble(
+            message = message,
+            onRetryMessage = onRetryMessage,
+            interactionState = interactionState,
+            onActionMenuRequest = onActionMenuRequest,
+            onActionMenuDismiss = onActionMenuDismiss,
+            onMessageAction = onMessageAction,
+        )
+    }
+}
+
+@Composable
+private fun MessageBubble(
+    message: Message,
+    onRetryMessage: (Message) -> Unit,
+    interactionState: MessageInteractionState,
+    onActionMenuRequest: (Message) -> Unit,
+    onActionMenuDismiss: () -> Unit,
+    onMessageAction: (Message, MessageAction) -> Unit,
+) {
     val outgoing = message.direction == MessageDirection.OUTGOING
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
     ) {
-        Column(
-            horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
-        ) {
-            Surface(
-                modifier = Modifier
-                    .widthIn(min = MIN_BUBBLE_WIDTH, max = MAX_BUBBLE_WIDTH)
-                    .heightIn(min = MIN_BUBBLE_HEIGHT),
-                shape = MessageBubbleShape(pointingLeft = !outgoing),
-                color = if (outgoing) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-            ) {
-                Box(
-                    modifier = Modifier.padding(
-                        start = if (outgoing) {
-                            BUBBLE_HORIZONTAL_PADDING
-                        } else {
-                            BUBBLE_HORIZONTAL_PADDING + 8.dp
-                        },
-                        end = if (outgoing) {
-                            BUBBLE_HORIZONTAL_PADDING + 8.dp
-                        } else {
-                            BUBBLE_HORIZONTAL_PADDING
-                        },
-                        top = BUBBLE_VERTICAL_PADDING,
-                        bottom = BUBBLE_VERTICAL_PADDING,
-                    ),
-                    contentAlignment = Alignment.CenterStart,
+        Box {
+            Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
+                Surface(
+                    modifier = Modifier
+                        .widthIn(min = MIN_BUBBLE_WIDTH, max = MAX_BUBBLE_WIDTH)
+                        .heightIn(min = MIN_BUBBLE_HEIGHT)
+                        .messageInteraction(
+                            enabled = interactionState.partialSelectionMessageId == null &&
+                                !interactionState.multiSelectActive,
+                            longClickLabel = appString(AppString.MESSAGE_ACTIONS),
+                            onActionMenuRequest = { onActionMenuRequest(message) },
+                        ),
+                    shape = MessageBubbleShape(pointingLeft = !outgoing),
+                    color = if (outgoing) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
                 ) {
-                    SelectionContainer {
-                        Text(
-                            text = message.body,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (outgoing) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
+                    Box(
+                        modifier = Modifier.padding(
+                            start = if (outgoing) {
+                                BUBBLE_HORIZONTAL_PADDING
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                BUBBLE_HORIZONTAL_PADDING + 8.dp
                             },
-                        )
+                            end = if (outgoing) {
+                                BUBBLE_HORIZONTAL_PADDING + 8.dp
+                            } else {
+                                BUBBLE_HORIZONTAL_PADDING
+                            },
+                            top = BUBBLE_VERTICAL_PADDING,
+                            bottom = BUBBLE_VERTICAL_PADDING,
+                        ),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        MessageBody(message, outgoing, interactionState.partialSelectionMessageId == message.id)
                     }
                 }
+                if (outgoing) {
+                    DeliveryState(
+                        message = message,
+                        retryEnabled = !interactionState.multiSelectActive,
+                        onRetryMessage = onRetryMessage,
+                    )
+                }
             }
-            if (outgoing) {
-                DeliveryState(message, onRetryMessage)
-            }
+            MessageActionMenu(
+                expanded = interactionState.actionMessageId == message.id,
+                onDismiss = onActionMenuDismiss,
+                onAction = { action -> onMessageAction(message, action) },
+            )
         }
     }
 }
 
 @Composable
-private fun DeliveryState(message: Message, onRetryMessage: (Message) -> Unit) {
+private fun MessageBody(message: Message, outgoing: Boolean, textSelectionEnabled: Boolean) {
+    val content: @Composable () -> Unit = {
+        Text(
+            text = message.body,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (outgoing) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        )
+    }
+    if (textSelectionEnabled) {
+        SelectionContainer { content() }
+    } else {
+        content()
+    }
+}
+
+private fun Modifier.messageInteraction(
+    enabled: Boolean,
+    longClickLabel: String,
+    onActionMenuRequest: () -> Unit,
+): Modifier = if (enabled) {
+    platformSecondaryClick(onActionMenuRequest)
+        .combinedClickable(
+            onClick = {},
+            onLongClickLabel = longClickLabel,
+            onLongClick = onActionMenuRequest,
+        )
+} else {
+    this
+}
+
+@Composable
+private fun DeliveryState(
+    message: Message,
+    retryEnabled: Boolean,
+    onRetryMessage: (Message) -> Unit,
+) {
     val failed = message.status == DeliveryStatus.FAILED
     Row(
         modifier = Modifier
             .padding(top = 4.dp, end = 4.dp)
-            .then(if (failed) Modifier.clickable { onRetryMessage(message) } else Modifier),
+            .then(if (failed && retryEnabled) Modifier.clickable { onRetryMessage(message) } else Modifier),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -665,6 +863,15 @@ internal sealed interface ChatTimelineItem {
         override val stableKey: String = "file:${transfer.id}"
     }
 }
+
+private data class MessageInteractionState(
+    val actionMessageId: String?,
+    val partialSelectionMessageId: String?,
+    val multiSelectActive: Boolean,
+    val selectedMessageIds: Set<String>,
+)
+
+internal fun Set<String>.toggle(value: String): Set<String> = if (value in this) this - value else this + value
 
 internal fun buildChatTimeline(
     messages: List<Message>,

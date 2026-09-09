@@ -1,5 +1,21 @@
 # SubnetDrop 任务状态
 
+## 当前计划：文字消息操作与多选
+
+- [x] 冻结 Android 长按、桌面右键、部分选中、本地删除、在线设备转发和多选的行为边界。
+- [x] 增加按会话限定的批量文字消息删除接口与转发用例，并接入 Koin/ViewModel。
+- [x] 实现共享 Compose 消息菜单、原生文字选择模式、在线设备选择器和多选顶部/底部操作栏。
+- [x] 补齐中英日资源、数据/领域/UI 纯逻辑测试和架构入口。
+- [x] 完成编译/测试修正，运行领域、数据、共享 UI、桌面和 Android shared 验证，不安装 Android 应用。
+- [x] 在审查与 `docs/tasks/verification/` 中记录验证结果。
+
+### 审查
+
+- 单条与多条转发统一进入 `ForwardMessagesUseCase`，按源消息时间排序并复用加密 `SendMessageUseCase`。
+- 删除是本机操作，SQLDelight Flow 会自动刷新当前会话；对端消息不会变化。
+- 文件消息继续保持原有传输与打开交互，本次没有引入不完整的文件转发或文件删除语义。
+- 自动验证结果见 `docs/tasks/verification/2026-09-09-message-actions.md`。
+
 ## 当前计划：附近设备删除菜单视觉优化
 
 - [x] 将单一删除项的上下文菜单补充为带设备身份和状态的紧凑 Material 3 菜单，强化操作归属。
