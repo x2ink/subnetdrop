@@ -284,8 +284,8 @@ private fun PeerRow(
     Box(Modifier.fillMaxWidth()) {
         PeerListItem(
             peer = peer,
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            interactionModifier = Modifier
                 .platformSecondaryClick { menuExpanded = true }
                 .combinedClickable(
                     onClick = { onPeerSelected(peer) },
@@ -313,8 +313,15 @@ internal fun PeerListItem(
     modifier: Modifier,
     trailingIcon: ImageVector,
     trailingContentDescription: String,
+    interactionModifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier) {
+    val shape = MaterialTheme.shapes.medium
+    Card(
+        modifier = modifier
+            .clip(shape)
+            .then(interactionModifier),
+        shape = shape,
+    ) {
         Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             PeerAvatar(peer.displayName, peer.availability == PeerAvailability.ONLINE)
             Column(Modifier.padding(start = 12.dp).weight(1f)) {

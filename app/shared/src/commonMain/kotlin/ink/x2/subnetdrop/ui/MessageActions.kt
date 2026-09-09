@@ -253,7 +253,7 @@ internal fun ForwardMessagesSheet(
         Text(
             text = appString(AppString.FORWARD_MESSAGES_TITLE, messageCount),
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Box(Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 480.dp)) {
@@ -273,8 +273,8 @@ internal fun ForwardMessagesSheet(
                             peer = peer,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onPeerSelected(peer) }
                                 .padding(horizontal = 16.dp),
+                            interactionModifier = Modifier.clickable { onPeerSelected(peer) },
                             trailingIcon = Icons.AutoMirrored.Filled.ArrowForward,
                             trailingContentDescription = appString(AppString.MESSAGE_ACTION_FORWARD),
                         )
