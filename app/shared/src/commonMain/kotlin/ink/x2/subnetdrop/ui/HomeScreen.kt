@@ -1,6 +1,7 @@
 package ink.x2.subnetdrop.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -23,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
@@ -69,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.jetbrains.compose.resources.painterResource
 import ink.x2.subnetdrop.AppUiState
 import ink.x2.subnetdrop.domain.model.AppLanguage
 import ink.x2.subnetdrop.domain.model.FileTransferSettings.Companion.BYTES_PER_GIB
@@ -79,7 +80,9 @@ import ink.x2.subnetdrop.domain.model.PeerAvailability
 import ink.x2.subnetdrop.domain.model.TrustState
 import ink.x2.subnetdrop.presentation.HomeSection
 import ink.x2.subnetdrop.resources.AppString
+import ink.x2.subnetdrop.resources.Res
 import ink.x2.subnetdrop.resources.appString
+import ink.x2.subnetdrop.resources.subnetdrop_app_icon
 import ink.x2.subnetdrop.runtime.RuntimeState
 import ink.x2.subnetdrop.runtime.RuntimeStartupPhase
 
@@ -160,10 +163,10 @@ private fun HomeHeader(displayName: String?) {
             color = MaterialTheme.colorScheme.primaryContainer,
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.ChatBubbleOutline,
+                Image(
+                    painter = painterResource(Res.drawable.subnetdrop_app_icon),
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }

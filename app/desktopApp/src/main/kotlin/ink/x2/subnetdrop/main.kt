@@ -7,9 +7,12 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import io.github.vinceglb.filekit.FileKit
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.painterResource
 import org.koin.core.context.startKoin
 import ink.x2.subnetdrop.di.commonModules
 import ink.x2.subnetdrop.di.desktopPlatformModule
+import ink.x2.subnetdrop.resources.Res
+import ink.x2.subnetdrop.resources.subnetdrop_app_icon
 import ink.x2.subnetdrop.runtime.SubnetDropRuntime
 import java.awt.Dimension
 
@@ -33,6 +36,7 @@ private fun launchApplication(runtime: SubnetDropRuntime) = application {
         },
         state = windowState,
         title = "SubnetDrop",
+        icon = painterResource(Res.drawable.subnetdrop_app_icon),
     ) {
         LaunchedEffect(window) {
             window.minimumSize = Dimension(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)

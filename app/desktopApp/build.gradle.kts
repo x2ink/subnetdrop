@@ -14,6 +14,7 @@ dependencies {
     implementation(libs.koin.core)
     implementation(libs.filekit.core)
     implementation(libs.logback)
+    implementation(libs.compose.components.resources)
 
     implementation(libs.compose.uiToolingPreview)
 }
@@ -34,6 +35,15 @@ compose.desktop {
                 "jdk.security.auth",
                 "jdk.unsupported",
             )
+            macOS {
+                iconFile.set(project.file("src/main/resources/icons/subnetdrop.icns"))
+            }
+            windows {
+                iconFile.set(project.file("src/main/resources/icons/subnetdrop.ico"))
+            }
+            linux {
+                iconFile.set(rootProject.file("app/shared/src/commonMain/composeResources/drawable/subnetdrop_app_icon.png"))
+            }
         }
     }
 }

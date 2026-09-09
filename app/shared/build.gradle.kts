@@ -78,4 +78,5 @@ dependencies {
 
 compose.resources {
     packageOfResClass = "ink.x2.subnetdrop.resources"
+    publicResClass = true
 }
