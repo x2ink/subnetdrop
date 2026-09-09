@@ -59,6 +59,7 @@ interface FileTransferService {
     val incomingOffers: StateFlow<List<IncomingFileOffer>>
     val transfers: StateFlow<List<FileTransfer>>
     suspend fun sendFile(peerId: String, file: LocalFile)
+    suspend fun sendFiles(peerId: String, files: List<LocalFile>)
     suspend fun acceptOffer(transferId: String)
     suspend fun rejectOffer(transferId: String)
     suspend fun cancelTransfer(transferId: String)
@@ -115,8 +116,9 @@ stateDiagram-v2
 ## 平台文件边界
 
 - Android 和桌面统一使用 FileKit 的 Compose Multiplatform launcher。
-- macOS/Windows 聊天页还使用 Compose Desktop 系统拖放目标接收文件列表；拖入文件与 FileKit 选择结果汇入同一个
-  元数据、批次数量和大小预检函数，再进入现有 `sendFiles`，不会形成另一套传输实现。目录和非文件载荷会被拒绝。
+- macOS/Windows 聊天页还使用 Compose Desktop 系统拖放目标和系统剪贴板接收文件列表；拖入或粘贴的文件与
+  FileKit 选择结果汇入同一个元数据、批次数量和大小预检函数，再进入现有 `sendFiles`，不会形成另一套传输实现。
+  目录和非文件载荷会被拒绝；剪贴板文件必须经用户确认，普通文字粘贴不被拦截。
 - Android provider 返回的内容先按当前上限检查元数据，再通过 FileKit 复制到应用 cache，避免超限文件在拒绝前占用
   本机空间，最后交给 JVM 共享传输实现读取。
 - 保存目录与单文件大小上限通过 Multiplatform Settings 持久化；Android 自定义目录使用 SAF 并保留 URI 权限，
@@ -126,8 +128,8 @@ stateDiagram-v2
 - MediaStore pending 条目的 `OpenableColumns.SIZE` 可能尚未刷新，因此 Android 的落盘长度从
   `ParcelFileDescriptor.statSize` 获取。提供方无法报告长度时，以协议累计字节数、写入流关闭结果和 SHA-256 为准。
 - 桌面默认目录是 `~/Downloads/SubnetDrop`；各平台都不会覆盖同名目标。
-- 接收完成并通过长度与 SHA-256 校验后，文件消息可调用系统默认应用打开；发送侧打开原始源文件。图片和视频消息
-  在完成且本地文件存在时切换为 4:3 预览卡，图片由 Coil 读取，视频展示平台生成的首帧；打开行为仍走系统应用。
+- 接收完成并通过长度与 SHA-256 校验后，文件消息可调用系统默认应用打开；发送侧打开原始源文件。完成且本地文件
+  存在时，图片切换为 4:3 缩略图卡片，视频切换为 16:9 首帧卡片；打开行为仍走系统应用。
 - 完成、拒绝、取消和失败的文件消息持久化到 SQLDelight；完成项保存本地路径，重启后仍会出现在聊天时间线。
 - 文件卡片组合时和打开前都会重新检查本地路径；文件被删除或移动后显示“已失效”，且不会调用系统打开器。
 - 发送端不把“已写入本机 HTTP 通道”误报为传输进度。接收端每实际写入 4 MiB 后通过控制 WebSocket 异步发送

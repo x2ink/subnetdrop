@@ -237,14 +237,14 @@ GitHub Actions 会把整个目录压缩为 `SubnetDrop-windows-x64-portable.zip`
 # 所有 JVM 测试
 ./gradlew :core:jvmTest :data:jvmTest :network:jvmTest :app:shared:jvmTest
 
-# 只运行端到端聊天与加密文件传输测试
+# 只运行端到端加密聊天与认证文件流测试
 ./gradlew :network:jvmTest --tests ink.x2.subnetdrop.network.transport.SubnetDropTransportTest
 ```
 
 测试报告位于各模块的 `build/reports/tests/`。
 
-桌面端接收文件默认保存到 `~/Downloads/SubnetDrop`。Android 使用应用专属外部 Downloads 目录，卸载应用前
-应自行备份其中需要保留的文件。
+桌面端接收文件默认保存到 `~/Downloads/SubnetDrop`。Android 默认通过 MediaStore 保存到系统公共
+`Download/SubnetDrop`，完成文件不会随应用卸载自动删除；用户选择的 SAF 目录优先于默认目录。
 
 ## 清理与重建
 

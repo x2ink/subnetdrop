@@ -38,7 +38,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 
 | 平台 | 目标版本 | 当前状态 | 仍需完成 |
 |---|---:|---|---|
-| Android | Android 11 / API 30+ | 核心功能已实现；共享 UDP 发现、可达探测和应用已通过 Android 编译 | 新发现协议需要再次进行 Android/macOS 真机互通；FileKit 与后台策略仍待验证 |
+| Android | Android 11 / API 30+ | 核心功能已实现；macOS 开启 VPN 时已验证从已知端点恢复 Android 在线，应用通过 Android 构建 | 最新双端版本的首次发现、FileKit 文件流程与后台策略仍待真机验证 |
 | macOS | 当前受支持版本 | Apple Silicon 本机 DMG 和 GitHub Intel DMG 已构建通过；本页截图来自当前构建 | 修订后的双架构 Actions 构建、正式签名、公证和发布身份下的 Keychain 隔离仍待验证 |
 | Windows | Windows 10+ | 共用 Desktop JVM 实现；Actions 同时构建便携 ZIP（内含 EXE）和 MSI | 修订后的 Windows Runner 构建，以及防火墙、凭据存储、UDP 发现和三端互通仍待验证 |
 

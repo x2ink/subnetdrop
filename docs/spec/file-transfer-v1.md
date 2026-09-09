@@ -9,7 +9,8 @@ device identity and trust model.
 ## Product behavior
 
 - A sender selects up to 50 local files from an open conversation. On desktop, dropping regular files anywhere inside
-  the open chat page provides the same input. Every file is an independent transfer and message.
+  the open chat page provides the same input. Pasting an operating-system file list into the focused composer performs
+  the same validation but requires explicit confirmation before sending. Every file is an independent transfer and message.
 - At most three outgoing transfers run concurrently across all batches; queued items remain visible as `PREPARING`.
 - Incoming offers are accepted automatically by default. The receiver can enable per-file confirmation in Settings;
   confirmation mode exposes accept and reject actions before any content bytes are sent.
@@ -128,6 +129,9 @@ bounded, while TCP backpressure naturally slows the source reader when the recei
 - macOS and Windows additionally accept the operating system's file-list drag payload on an open chat page. Dragged
   files use the same batch-count, metadata and configured size validation as picker selections; directories and other
   payload types are rejected instead of being interpreted as files.
+- When the desktop composer has focus, Ctrl/Cmd+V intercepts only an operating-system file-list payload. It reuses the
+  picker/drop validation and displays the destination plus selected files for confirmation. Cancelling creates no file
+  message, database row or network transfer; ordinary text paste remains native text-field behavior.
 - Android provider-backed selections are size-checked before FileKit copies them into app cache for the JVM transport.
 - Android retains access to a selected Storage Access Framework directory. Desktop stores the selected path directly.
 - Desktop initially uses `~/Downloads/SubnetDrop`. Android uses MediaStore to publish completed files in the public
@@ -156,3 +160,5 @@ bounded, while TCP backpressure naturally slows the source reader when the recei
     its own limit.
 14. Dropping one or more regular files into an open desktop chat displays a drop affordance and sends them through the
     same batch transfer path as picker selections; directories, non-file payloads and oversized batches fail explicitly.
+15. Pasting desktop files into the focused composer requires confirmation before invoking the same validated batch
+    transfer path, while ordinary text paste remains unchanged.

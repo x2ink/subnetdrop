@@ -24,7 +24,6 @@ flowchart TB
 | Source set / module | 共享内容 |
 |---|---|
 | `commonMain` | 领域模型、端口、用例、SQLDelight 仓库、协议模型、Compose UI、ViewModel |
-| `jvmAndAndroidMain` | Ktor CIO 传输和 Google Tink JVM/Android 密码实现 |
 | `jvmAndAndroidMain` | UDP 组播、Ktor CIO 传输和 Google Tink JVM/Android 密码实现 |
 | `androidMain` | Wi-Fi multicast lock、Keystore、Android SQLDelight driver、Android Koin module |
 | `jvmMain` | java-keyring、SQLite JDBC、桌面 Koin module |
