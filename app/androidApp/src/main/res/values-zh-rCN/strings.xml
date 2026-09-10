@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">SubnetDrop</string>
+    <string name="background_service_channel_name">后台连接</string>
+    <string name="background_service_channel_description">保持附近设备发现和文件传输运行</string>
+    <string name="background_service_notification_title">SubnetDrop 正在运行</string>
+    <string name="background_service_notification_text">附近设备发现和文件传输保持活动</string>
+    <string name="background_service_sending_file">正在发送 %1$s</string>
+    <string name="background_service_receiving_file">正在接收 %1$s</string>
+    <string name="background_service_transferring_file">正在传输 %1$s</string>
+    <string name="background_service_sending_files">正在发送 %1$d 个文件</string>
+    <string name="background_service_receiving_files">正在接收 %1$d 个文件</string>
+    <string name="background_service_transferring_files">正在传输 %1$d 个文件</string>
+    <string name="background_service_preparing_transfer">正在准备传输…</string>
+    <string name="background_service_transfer_progress">%1$s / %2$s · %3$d%%</string>
+</resources>

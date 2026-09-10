@@ -204,6 +204,7 @@ interface TrustedIdentityRepository
 | 接收目录 | MediaStore 公共 Download/SubnetDrop；可选择 SAF 目录 | 默认 `~/Downloads/SubnetDrop`；可选择本地目录 |
 | 文件设置 | Multiplatform Settings + SharedPreferences | Multiplatform Settings + Preferences |
 | UI | Compose Android | Compose Desktop |
+| 运行时生命周期 | `connectedDevice` 前台 Service；切后台不停止，强制停止后终止 | 绑定应用进程；窗口失焦或最小化不停止，退出进程后终止 |
 
 平台适配状态和未验证边界以根 [README](../README.md#平台适配状态) 为准，构建命令以
 [BUILD_GUILD.md](../BUILD_GUILD.md) 为准。

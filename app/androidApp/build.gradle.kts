@@ -14,11 +14,11 @@ dependencies {
     implementation(project(":app:shared"))
 
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.process)
     implementation(libs.koin.android)
 
     implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)
+    testImplementation(libs.kotlin.testJunit)
 }
 
 android {

@@ -15,6 +15,8 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 
 - **同网即用**：设备主动发送 UDP 组播公告，再用 WebSocket `PING/PONG` 确认对端真实可达。
 - **自动恢复在线**：保留已知设备端点并退避探测，启动竞态、组播丢包或 VPN 切换后无需重启即可恢复。
+- **Android 后台传输**：使用 `connectedDevice` 前台 Service 持有局域网运行时，切换应用、锁屏或划掉最近任务时
+  不主动中断发现和传输；通知栏同步展示单文件或多文件汇总进度，用户强制停止应用仍遵循系统行为终止连接。
 - **隔离 VPN 默认路由**：发现会避开隧道虚拟网卡；Android 将局域网会话绑定到 Wi-Fi，避免跟随 VPN 默认路由。
 - **无中心服务器**：每台设备既能监听也能主动连接，消息和文件直接在两端之间传输。
 - **显式建立信任**：双方核对相同的六位安全码后才保存公钥；已配对设备密钥变化会进入阻断状态。
@@ -38,7 +40,7 @@ SubnetDrop 是一个面向 Android、macOS 和 Windows 的局域网直连应用�
 
 | 平台 | 目标版本 | 当前状态 | 仍需完成 |
 |---|---:|---|---|
-| Android | Android 11 / API 30+ | 核心功能已实现；macOS 开启 VPN 时已验证从已知端点恢复 Android 在线，应用通过 Android 构建 | 最新双端版本的首次发现、FileKit 文件流程与后台策略仍待真机验证 |
+| Android | Android 11 / API 30+ | 核心功能及 `connectedDevice` 前台 Service 已实现；macOS 开启 VPN 时已验证从已知端点恢复 Android 在线，应用通过 Android 构建 | 最新双端版本的首次发现、FileKit 文件流程，以及后台/锁屏/最近任务划除后的传输仍待真机验证 |
 | macOS | 当前受支持版本 | Apple Silicon 本机 DMG 和 GitHub Intel DMG 已构建通过；本页截图来自当前构建 | 修订后的双架构 Actions 构建、正式签名、公证和发布身份下的 Keychain 隔离仍待验证 |
 | Windows | Windows 10+ | 共用 Desktop JVM 实现；Actions 同时构建便携 ZIP（内含 EXE）和 MSI | 修订后的 Windows Runner 构建，以及防火墙、凭据存储、UDP 发现和三端互通仍待验证 |
 

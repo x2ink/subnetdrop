@@ -15,7 +15,7 @@
 
 - Group chat, Internet relay, NAT traversal, account registration, cloud backup, multi-device history sync, calls, and push notifications.
 - Guaranteed reachability on guest Wi-Fi, client-isolated access points, or segmented enterprise VLANs.
-- Background delivery on Android in v1 unless the foreground service is explicitly enabled.
+- Continuing to transfer after the user force-stops the Android app or explicitly exits the desktop process.
 
 ## User flows
 
@@ -27,9 +27,10 @@ needs them. Private material never appears in discovery metadata.
 
 ### Discovery
 
-Each foreground device listens on UDP `224.0.0.167:45893` and sends a bounded JSON announcement after 100 ms, 500 ms,
-and 2 seconds. The announcement contains only the protocol version, device ID, display name, TCP listener port, and whether
-a reply is requested. A receiver replies once by UDP unicast and probes the announced `/chat` endpoint with `PING/PONG`.
+Each running desktop process or Android foreground-service instance listens on UDP `224.0.0.167:45893` and sends a bounded
+JSON announcement after 100 ms, 500 ms, and 2 seconds. The announcement contains only the protocol version, device ID,
+display name, TCP listener port, and whether a reply is requested. A receiver replies once by UDP unicast and probes the
+announced `/chat` endpoint with `PING/PONG`.
 The peer becomes `ONLINE` only after that WebSocket probe succeeds; an announcement alone is never proof of reachability.
 
 Point-to-point and virtual tunnel interfaces are excluded from multicast membership. On Android, the local-only process
@@ -50,6 +51,18 @@ refresh does not restart the chat transport or clear peers, trust, or history.
 Android users can long-press a nearby peer and desktop users can right-click it to open the device action menu. Forgetting
 a peer removes its verified identity and current discovery target. The confirmation dialog can optionally delete that
 peer's text and file-message history; downloaded files remain on disk. A peer discovered again must be paired again.
+
+### Platform runtime lifecycle
+
+Android starts a `connectedDevice` foreground service from a visible activity. The service owns the shared runtime, keeps
+discovery and active transfers running after the UI enters the background, and displays an ongoing notification while the
+device remains visible on the LAN. During active transfers the notification shows the single file or aggregate batch
+progress from `FileTransferService.transfers`, using receiver-confirmed bytes and a bounded update rate. Swiping between
+apps, pressing Home, or locking the screen must not deliberately stop the runtime. A user force-stop remains terminal until
+the user launches the app again.
+
+Desktop platforms keep the runtime attached to the application process rather than an individual window's foreground
+state. Minimizing or unfocusing the window does not stop transfers; explicitly exiting the process does.
 
 ### Pairing
 
@@ -175,3 +188,6 @@ Long-lived database, repository, discovery, identity, and connection-manager ins
 9. Android and desktop unit tests pass, and physical Android/macOS/Windows interoperability is recorded before release.
 10. The Nearby screen refresh action immediately announces the local device and probes remembered endpoints without
     blocking navigation or resetting stored peer state.
+11. On Android, an active transfer and LAN listener remain running after the app enters the background while the foreground
+    service notification is present; the notification reports receiver-confirmed transfer progress, and force-stopping the
+    app terminates the runtime.

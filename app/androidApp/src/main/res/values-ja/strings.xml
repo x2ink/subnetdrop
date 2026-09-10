@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">SubnetDrop</string>
+    <string name="background_service_channel_name">バックグラウンド接続</string>
+    <string name="background_service_channel_description">近くのデバイス検出とファイル転送を継続します</string>
+    <string name="background_service_notification_title">SubnetDrop は実行中です</string>
+    <string name="background_service_notification_text">近くのデバイス検出とファイル転送は有効です</string>
+    <string name="background_service_sending_file">%1$s を送信中</string>
+    <string name="background_service_receiving_file">%1$s を受信中</string>
+    <string name="background_service_transferring_file">%1$s を転送中</string>
+    <string name="background_service_sending_files">%1$d 個のファイルを送信中</string>
+    <string name="background_service_receiving_files">%1$d 個のファイルを受信中</string>
+    <string name="background_service_transferring_files">%1$d 個のファイルを転送中</string>
+    <string name="background_service_preparing_transfer">転送を準備中…</string>
+    <string name="background_service_transfer_progress">%1$s / %2$s · %3$d%%</string>
+</resources>

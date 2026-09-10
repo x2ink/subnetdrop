@@ -4,6 +4,44 @@
 [`verification/`](./verification/)；架构、长期原理和冻结规格分别从 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)、
 [`technical-principles/`](../technical-principles/) 和 [`spec/`](../spec/) 进入。
 
+## 已完成：Android 文件传输通知进度
+
+- [x] 核对文件传输 StateFlow、双端确认进度和前台服务通知生命周期。
+- [x] 将活动传输汇总为单文件/多文件、发送/接收通知状态。
+- [x] 以前台通知展示文件名、累计字节、百分比和系统进度条，并限制刷新频率。
+- [x] 补齐中英日通知文案和汇总逻辑单元测试。
+- [x] 执行 Android 完整打包与相关测试，记录验证结果。
+
+### 方案审查
+
+- 通知以 `FileTransferService.transfers` 为唯一数据源；发送端使用接收端确认的 `transferredBytes`，保持与聊天消息
+  进度一致，不另建一套上传计数。
+- 多文件通知按全部活动文件的总字节汇总；方向一致时显示发送或接收，混合方向时显示传输。
+- 系统通知更新做 500ms 采样，避免 4 MiB 进度帧在高速局域网中触发过密 Binder/系统 UI 刷新。
+- 空闲时通知恢复为局域网可见状态；活动文件全部进入终态后，不保留已经完成的进度条。
+- 汇总逻辑单元测试和完整 Debug APK 构建通过；本轮未安装 Android，通知实际布局和后台传输仍需真机确认。
+
+## 已完成：Android 后台局域网服务
+
+- [x] 核对 Android 前后台生命周期、传输终止路径和前台服务类型。
+- [x] 使用 `connectedDevice` 前台 Service 承载发现、控制通道与文件传输运行时。
+- [x] 移除进入后台即停止 Runtime 的进程生命周期逻辑，并保持桌面进程级生命周期不变。
+- [x] 补齐服务通知、Manifest 权限与中英日资源。
+- [x] 编译 Android 与桌面端，运行共享及网络回归测试并记录验证结果。
+
+### 方案审查
+
+- Android 当前在 `ProcessLifecycleOwner.onStop` 主动关闭 Runtime，切到后台就会终止 Ktor 服务和文件连接；这也是
+  发送端出现 `Connection reset` 的直接原因。
+- 服务使用 `connectedDevice` 类型，匹配通过网络与外部设备持续交互的用途，并避免 Android 15+ 对 `dataSync`
+  前台服务的累计运行时限。
+- 前台服务只从可见 Activity 启动；进入后台后由通知向用户持续说明局域网可见状态。用户强制停止应用时不尝试绕过
+  系统限制自动恢复。
+- `SubnetDropRuntime` 继续作为 Koin 进程单例，Activity 重建只会再次投递幂等的 Service start，不会创建第二套
+  Ktor/发现服务。Service 销毁时以三秒上限完成确定性清理，避免 sticky replacement 与旧 Runtime 交叉启停。
+- Android、桌面编译及共享/网络 JVM 测试通过，合并 Manifest 已确认服务类型和权限。按项目约束未安装 Android；
+  Home、锁屏、最近任务划除和通知权限拒绝场景仍需真机回归。
+
 ## 已完成：桌面文件消息定位
 
 - [x] 文件消息菜单仅在桌面端提供“在文件管理器中显示”。

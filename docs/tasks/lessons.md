@@ -1,5 +1,19 @@
 # 项目经验
 
+## Android 后台传输必须脱离界面生命周期
+
+- `ProcessLifecycleOwner.onStop` 表示整个应用 UI 进入后台，不表示进程即将退出。若在这里停止 Runtime，按 Home、
+  锁屏或切换应用都会主动关闭 Ktor 和文件流，对端只能看到 TCP `Connection reset`。
+- 长期局域网发现和与外部设备持续通信应由 `connectedDevice` 前台 Service 持有；Activity 只负责从用户可见场景
+  启动服务，不能成为传输任务的生命周期所有者。
+- 前台 Service、Koin Runtime 和网络监听必须保持一套进程级实例。Activity 重建、通知回跳和 sticky restart 都要
+  依赖幂等启动与串行停止，避免重复绑定端口或新旧 Runtime 交叉关闭。
+- “进入后台”“划掉最近任务”“系统回收进程”和“用户强制停止”是不同状态。前台服务可以覆盖前三者中的正常后台
+  运行和部分系统重启，但无法绕过用户强制停止；验证报告必须分别记录。
+- Android 的 `compileDebugKotlin` 不会覆盖安装链路中的全部 AAR metadata 检查。新增 AndroidX 直接依赖后必须至少
+  执行一次 `assembleDebug`，否则可能漏掉依赖要求更高 compileSdk 或 AGP 的问题；平台已有 API 能满足时不额外引入
+  只为一个调用服务的兼容库。
+
 ## 可点击卡片要分离外边距与交互修饰符
 
 - Compose 修饰符顺序会同时影响测量、命中范围和 indication 绘制。若先 `clickable` 再 `padding`，外边距也会成为
