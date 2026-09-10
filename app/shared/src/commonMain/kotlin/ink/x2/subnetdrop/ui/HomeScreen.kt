@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
@@ -64,7 +65,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +86,7 @@ import ink.x2.subnetdrop.presentation.HomeSection
 import ink.x2.subnetdrop.resources.AppString
 import ink.x2.subnetdrop.resources.Res
 import ink.x2.subnetdrop.resources.appString
+import ink.x2.subnetdrop.resources.github_mark
 import ink.x2.subnetdrop.resources.subnetdrop_app_icon
 import ink.x2.subnetdrop.runtime.RuntimeState
 import ink.x2.subnetdrop.runtime.RuntimeStartupPhase
@@ -605,6 +610,8 @@ private fun SettingsPanel(
     onAppLanguageChanged: (AppLanguage) -> Unit,
     onSettingsError: (String) -> Unit,
 ) {
+    val uriHandler = LocalUriHandler.current
+    val openGitHubFailedMessage = appString(AppString.OPEN_GITHUB_FAILED)
     var draftName by remember(displayName) { mutableStateOf(displayName.orEmpty()) }
     var draftMaxFileSizeGiB by remember(maxFileSizeBytes) {
         mutableStateOf((maxFileSizeBytes / BYTES_PER_GIB).toString())
@@ -663,7 +670,7 @@ private fun SettingsPanel(
         }
         item {
             SettingValue(
-                Icons.Outlined.Devices,
+                rememberVectorPainter(Icons.Outlined.Devices),
                 appString(AppString.DEVICE_ID),
                 deviceId ?: appString(AppString.NOT_READY),
             )
@@ -678,7 +685,7 @@ private fun SettingsPanel(
         }
         item {
             SettingValue(
-                icon = Icons.Outlined.Language,
+                icon = rememberVectorPainter(Icons.Outlined.Language),
                 label = appString(AppString.APP_LANGUAGE),
                 value = appLanguage.label(),
                 modifier = Modifier.clickable { showLanguageDialog = true },
@@ -756,7 +763,7 @@ private fun SettingsPanel(
         }
         item {
             SettingValue(
-                icon = Icons.Outlined.FolderOpen,
+                icon = rememberVectorPainter(Icons.Outlined.FolderOpen),
                 label = appString(AppString.FILE_SAVE_LOCATION),
                 value = displaySaveDirectory(
                     saveDirectory,
@@ -764,6 +771,28 @@ private fun SettingsPanel(
                 ),
                 modifier = Modifier.clickable(onClick = launchDirectoryPicker),
                 trailingIcon = Icons.Outlined.ChevronRight,
+            )
+        }
+        item {
+            Text(
+                text = appString(AppString.ABOUT),
+                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        item {
+            SettingValue(
+                icon = painterResource(Res.drawable.github_mark),
+                iconTint = MaterialTheme.colorScheme.onSurface,
+                label = appString(AppString.GITHUB),
+                value = SUBNETDROP_REPOSITORY_URL.removePrefix("https://"),
+                modifier = Modifier.clickable {
+                    runCatching { uriHandler.openUri(SUBNETDROP_REPOSITORY_URL) }
+                        .onFailure { onSettingsError(openGitHubFailedMessage) }
+                },
+                trailingIcon = Icons.AutoMirrored.Outlined.OpenInNew,
+                trailingIconDescription = appString(AppString.OPEN_GITHUB),
             )
         }
     }
@@ -843,11 +872,13 @@ private fun ToggleSetting(
 
 @Composable
 private fun SettingValue(
-    icon: ImageVector,
+    icon: Painter,
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    iconTint: Color = MaterialTheme.colorScheme.primary,
     trailingIcon: ImageVector? = null,
+    trailingIconDescription: String? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -855,7 +886,7 @@ private fun SettingValue(
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Icon(painter = icon, contentDescription = null, tint = iconTint)
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(label, style = MaterialTheme.typography.labelMedium)
                 Text(
@@ -867,13 +898,17 @@ private fun SettingValue(
                 )
             }
             trailingIcon?.let {
-                Icon(it, contentDescription = appString(AppString.CHANGE_SETTING, label))
+                Icon(
+                    imageVector = it,
+                    contentDescription = trailingIconDescription ?: appString(AppString.CHANGE_SETTING, label),
+                )
             }
         }
     }
 }
 
 private const val MAX_FILE_SIZE_INPUT_LENGTH = 4
+private const val SUBNETDROP_REPOSITORY_URL = "https://github.com/x2ink/subnetdrop"
 
 @Composable
 private fun RuntimeState.label(): String = when (this) {

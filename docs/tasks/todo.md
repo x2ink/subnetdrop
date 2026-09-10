@@ -4,6 +4,21 @@
 [`verification/`](./verification/)；架构、长期原理和冻结规格分别从 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)、
 [`technical-principles/`](../technical-principles/) 和 [`spec/`](../spec/) 进入。
 
+## 已完成：设置页 GitHub 入口
+
+- [x] 在设置页底部增加“关于”分区和 SubnetDrop GitHub 仓库入口。
+- [x] 使用共享 Compose URI 能力在 Android 与桌面端交给系统默认浏览器打开。
+- [x] 补齐中英日文案并验证 Android、桌面端编译。
+- [x] 记录实现审查与验证结果。
+
+### 方案审查
+
+- GitHub 入口位于可滚动设置列表末尾，使用 GitHub 官方 Primer Octicons Mark 展示公开仓库地址和外部打开图标，
+  不影响现有文件与语言设置。
+- 使用 Compose `LocalUriHandler` 统一交给 Android 系统 Intent 和桌面默认浏览器，不新增重复的平台适配器。
+- URI 打开异常会转为应用内提示；入口、无障碍说明和失败信息均覆盖中英日三语。
+- Android 与桌面 Kotlin 编译通过；本轮未安装应用，系统浏览器实际跳转需在目标设备点击确认。
+
 ## 已完成：Android 文件传输通知进度
 
 - [x] 核对文件传输 StateFlow、双端确认进度和前台服务通知生命周期。

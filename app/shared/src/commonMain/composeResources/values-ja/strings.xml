@@ -16,6 +16,10 @@
     <string name="language_simplified_chinese">简体中文</string>
     <string name="language_english">English</string>
     <string name="language_japanese">日本語</string>
+    <string name="about">このアプリについて</string>
+    <string name="github">GitHub</string>
+    <string name="open_github">GitHub で SubnetDrop を開く</string>
+    <string name="open_github_failed">既定のブラウザーで GitHub を開けませんでした</string>
     <string name="no_devices_title">デバイスが見つかりません</string>
     <string name="no_devices_detail">他のデバイスで SubnetDrop を開き、同じ Wi-Fi に接続してください。</string>
     <string name="delete_device">デバイスを削除</string>
