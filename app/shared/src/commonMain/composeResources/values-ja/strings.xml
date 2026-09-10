@@ -44,7 +44,7 @@
     <string name="runtime_resetting_peers">デバイス状態を復元中…</string>
     <string name="runtime_starting_transport">メッセージ受信サービスを開始中…</string>
     <string name="runtime_starting_discovery">近くのデバイスを検索中…</string>
-    <string name="runtime_online">オンライン · 同じ LAN 内でのみ表示</string>
+    <string name="runtime_online">オンライン</string>
     <string name="runtime_degraded">サービスエラー：%1$s</string>
     <string name="runtime_degraded_no_detail">LAN サービスを利用できません</string>
     <string name="runtime_failed">起動失敗：%1$s</string>

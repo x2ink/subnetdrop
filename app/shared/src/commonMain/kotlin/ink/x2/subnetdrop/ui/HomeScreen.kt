@@ -119,8 +119,7 @@ fun HomeScreen(
         },
     ) { contentPadding ->
         Column(Modifier.fillMaxSize().padding(contentPadding)) {
-            HomeHeader(state.localDisplayName)
-            RuntimeBanner(state.runtimeState, onRetry)
+            HomeHeader(state.localDisplayName,state.runtimeState,onRetry)
             when (state.section) {
                 HomeSection.NEARBY -> PeerList(
                     peers = state.peers,
@@ -149,7 +148,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(displayName: String?) {
+private fun HomeHeader(displayName: String?,runtimeState: RuntimeState, onRetry: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -171,14 +170,12 @@ private fun HomeHeader(displayName: String?) {
             }
         }
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-            Text("SubnetDrop", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(
-                text = displayName ?: appString(AppString.LOADING_LOCAL_PROFILE),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Text(displayName ?: appString(AppString.LOADING_LOCAL_PROFILE),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+            RuntimeBanner(runtimeState, onRetry)
         }
     }
 }
@@ -186,12 +183,9 @@ private fun HomeHeader(displayName: String?) {
 @Composable
 private fun RuntimeBanner(state: RuntimeState, onRetry: () -> Unit) {
     val message = state.label()
-    val isError = state is RuntimeState.Degraded || state is RuntimeState.Failed
-    Surface(
-        color = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
-    ) {
+//    val isError = state is RuntimeState.Degraded || state is RuntimeState.Failed
+    Surface(color = Color.Transparent){
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusDot(state is RuntimeState.Running)

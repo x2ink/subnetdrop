@@ -44,7 +44,7 @@
     <string name="runtime_resetting_peers">正在恢复设备状态…</string>
     <string name="runtime_starting_transport">正在启动消息接收服务…</string>
     <string name="runtime_starting_discovery">正在启动附近设备发现…</string>
-    <string name="runtime_online">已在线 · 仅同一局域网可见</string>
+    <string name="runtime_online">已在线</string>
     <string name="runtime_degraded">服务异常：%1$s</string>
     <string name="runtime_degraded_no_detail">局域网服务暂不可用</string>
     <string name="runtime_failed">启动失败：%1$s</string>

@@ -44,7 +44,7 @@
     <string name="runtime_resetting_peers">Restoring device status…</string>
     <string name="runtime_starting_transport">Starting message receiver…</string>
     <string name="runtime_starting_discovery">Starting nearby-device discovery…</string>
-    <string name="runtime_online">Online · Visible only on this LAN</string>
+    <string name="runtime_online">Online</string>
     <string name="runtime_degraded">Service issue: %1$s</string>
     <string name="runtime_degraded_no_detail">The LAN service is unavailable</string>
     <string name="runtime_failed">Startup failed: %1$s</string>
