@@ -63,6 +63,7 @@
     <string name="send_message">Send message</string>
     <string name="message_actions">Message actions</string>
     <string name="message_action_copy">Copy</string>
+    <string name="message_action_reveal_in_file_manager">Show in folder</string>
     <string name="message_action_forward">Forward</string>
     <string name="message_action_partial_select">Select text</string>
     <string name="message_action_delete">Delete</string>
@@ -101,6 +102,7 @@
     <string name="receive_file_message">%1$s wants to send %2$s (%3$s)</string>
     <string name="open_file_failed">Could not open the file with the default application</string>
     <string name="copy_file_failed">Could not copy the file</string>
+    <string name="reveal_file_failed">Could not show the file in the file manager</string>
     <string name="paste_files_title">Send copied files?</string>
     <string name="paste_files_message">Send %1$d files to %2$s?</string>
     <string name="file_picker_open_failed">Could not open the file picker</string>

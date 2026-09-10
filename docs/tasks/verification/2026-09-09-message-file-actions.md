@@ -32,3 +32,9 @@
 - Android Debug APK 已构建但未安装，符合本次“不安装 Android 应用”的约束。
 - Android 长按、`content://` 再转发和桌面双击/右键的最终手感仍需在真实设备交互验收；编译与纯逻辑测试不能替代
   指针、触摸及系统文件提供方验证。
+
+## 2026-09-10：桌面文件定位入口
+
+- 文件消息右键菜单新增“在文件管理器中显示”，仅 JVM 桌面端展示，本地文件不存在时禁用。
+- 使用 JDK `Desktop.browseFileDirectory` 调用 Finder、Explorer 或系统文件管理器定位文件。
+- `:app:androidApp:compileDebugKotlin` 与 `:app:desktopApp:compileKotlin` 编译通过；未安装 Android 应用。

@@ -156,6 +156,7 @@ fun ChatScreen(
     }
     val openFileFailed = appString(AppString.OPEN_FILE_FAILED)
     val copyFileFailed = appString(AppString.COPY_FILE_FAILED)
+    val revealFileFailed = appString(AppString.REVEAL_FILE_FAILED)
     val openFile = { transfer: FileTransfer ->
         runCatching {
             FileKit.openFileWithDefaultApplication(PlatformFile(requireNotNull(transfer.localPath)))
@@ -216,6 +217,7 @@ fun ChatScreen(
                         MessageAction.COPY -> coroutineScope.launch {
                             clipboard.setClipEntry(plainTextClipEntry(message.body))
                         }
+                        MessageAction.REVEAL_IN_FILE_MANAGER -> Unit
                         MessageAction.FORWARD -> forwardQueue = listOf(message)
                         MessageAction.PARTIAL_SELECT -> partialSelectionMessageId = message.id
                         MessageAction.DELETE -> deleteQueue = listOf(message)
@@ -241,6 +243,16 @@ fun ChatScreen(
                                 throw exception
                             } catch (exception: Exception) {
                                 onFilePickerError(inputMessages.withDetail(copyFileFailed, exception.message))
+                            }
+                        }
+                        MessageAction.REVEAL_IN_FILE_MANAGER -> coroutineScope.launch {
+                            val localPath = transfer.localPath ?: return@launch
+                            try {
+                                revealFileInManager(localPath)
+                            } catch (exception: CancellationException) {
+                                throw exception
+                            } catch (exception: Exception) {
+                                onFilePickerError(inputMessages.withDetail(revealFileFailed, exception.message))
                             }
                         }
                         MessageAction.FORWARD -> forwardFileQueue = listOf(transfer)
@@ -805,7 +817,10 @@ private fun FileTransferMessage(
     val terminal = transfer.isTerminal()
     val forwardable = transfer.isForwardable() && localFileExists == true
     val enabledActions = buildSet {
-        if (transfer.localPath != null && localFileExists == true) add(MessageAction.COPY)
+        if (transfer.localPath != null && localFileExists == true) {
+            add(MessageAction.COPY)
+            if (supportsFileManagerReveal) add(MessageAction.REVEAL_IN_FILE_MANAGER)
+        }
         if (forwardable) add(MessageAction.FORWARD)
         if (terminal) {
             add(MessageAction.DELETE)
@@ -1346,12 +1361,13 @@ class MessageBubbleShape(
 private val MAX_BUBBLE_WIDTH = 560.dp
 private val MAX_FILE_MESSAGE_WIDTH = 440.dp
 private val MAX_FILE_CONTENT_WIDTH = 320.dp
-private val FILE_MESSAGE_ACTIONS = listOf(
-    MessageAction.COPY,
-    MessageAction.FORWARD,
-    MessageAction.DELETE,
-    MessageAction.MULTI_SELECT,
-)
+private val FILE_MESSAGE_ACTIONS = buildList {
+    add(MessageAction.COPY)
+    if (supportsFileManagerReveal) add(MessageAction.REVEAL_IN_FILE_MANAGER)
+    add(MessageAction.FORWARD)
+    add(MessageAction.DELETE)
+    add(MessageAction.MULTI_SELECT)
+}
 private val MIN_BUBBLE_WIDTH = 64.dp
 private val MIN_BUBBLE_HEIGHT = 48.dp
 private val BUBBLE_HORIZONTAL_PADDING = 14.dp

@@ -63,6 +63,7 @@
     <string name="send_message">发送消息</string>
     <string name="message_actions">消息操作</string>
     <string name="message_action_copy">复制</string>
+    <string name="message_action_reveal_in_file_manager">外部打开</string>
     <string name="message_action_forward">转发</string>
     <string name="message_action_partial_select">部分选中</string>
     <string name="message_action_delete">删除</string>
@@ -101,6 +102,7 @@
     <string name="receive_file_message">%1$s 想发送 %2$s（%3$s）</string>
     <string name="open_file_failed">无法使用系统应用打开文件</string>
     <string name="copy_file_failed">无法复制文件</string>
+    <string name="reveal_file_failed">无法在文件管理器中显示文件</string>
     <string name="paste_files_title">发送已复制的文件？</string>
     <string name="paste_files_message">将 %1$d 个文件发送给 %2$s？</string>
     <string name="file_picker_open_failed">无法打开文件选择器</string>

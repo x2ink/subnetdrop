@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.TextFields
@@ -47,6 +48,7 @@ import ink.x2.subnetdrop.resources.appString
 
 internal enum class MessageAction {
     COPY,
+    REVEAL_IN_FILE_MANAGER,
     FORWARD,
     PARTIAL_SELECT,
     DELETE,
@@ -56,7 +58,7 @@ internal enum class MessageAction {
 @Composable
 internal fun MessageActionMenu(
     expanded: Boolean,
-    actions: List<MessageAction> = MessageAction.entries,
+    actions: List<MessageAction> = TEXT_MESSAGE_ACTIONS,
     enabledActions: Set<MessageAction> = actions.toSet(),
     onDismiss: () -> Unit,
     onAction: (MessageAction) -> Unit,
@@ -122,6 +124,10 @@ private fun MessageAction.presentation(): MessageActionPresentation = when (this
     MessageAction.COPY -> MessageActionPresentation(
         Icons.Outlined.ContentCopy,
         appString(AppString.MESSAGE_ACTION_COPY),
+    )
+    MessageAction.REVEAL_IN_FILE_MANAGER -> MessageActionPresentation(
+        Icons.Outlined.FolderOpen,
+        appString(AppString.MESSAGE_ACTION_REVEAL_IN_FILE_MANAGER),
     )
     MessageAction.FORWARD -> MessageActionPresentation(
         Icons.AutoMirrored.Filled.ArrowForward,
@@ -319,4 +325,12 @@ internal fun eligibleForwardTargets(peers: List<Peer>): List<Peer> = peers
 private data class MessageActionPresentation(
     val icon: ImageVector,
     val label: String,
+)
+
+private val TEXT_MESSAGE_ACTIONS = listOf(
+    MessageAction.COPY,
+    MessageAction.FORWARD,
+    MessageAction.PARTIAL_SELECT,
+    MessageAction.DELETE,
+    MessageAction.MULTI_SELECT,
 )

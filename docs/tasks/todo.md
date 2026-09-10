@@ -4,6 +4,12 @@
 [`verification/`](./verification/)；架构、长期原理和冻结规格分别从 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)、
 [`technical-principles/`](../technical-principles/) 和 [`spec/`](../spec/) 进入。
 
+## 已完成：桌面文件消息定位
+
+- [x] 文件消息菜单仅在桌面端提供“在文件管理器中显示”。
+- [x] 复用本地文件状态并调用系统文件管理器定位文件。
+- [x] 补齐中英日文案并完成桌面、Android 编译检查。
+
 ## 已完成：设备项交互边界修复
 
 - [x] 确认首页与转发面板复用设备项时的布局、点击和圆角裁剪顺序。
